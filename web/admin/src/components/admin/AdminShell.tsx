@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   MessagesSquare,
+  MoreHorizontal,
   Settings,
   ShieldCheck,
   Users,
@@ -86,6 +87,9 @@ export function AdminShell({ children, title, subtitle }: { children: ReactNode;
 
   const visible = navItems.filter((item) => can(item.key));
   const activeKey = [...visible].reverse().find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.key;
+  const quickNav = (["dashboard", "members", "moderation", "security"] as AdminArea[])
+    .map((key) => visible.find((item) => item.key === key))
+    .filter((item): item is (typeof navItems)[number] => Boolean(item));
 
   const sidebar = (
     <div className="admin-sidebar-inner">
@@ -161,6 +165,18 @@ export function AdminShell({ children, title, subtitle }: { children: ReactNode;
           </div>
         </header>
         <main id="admin-main" className="admin-main">{children}</main>
+        <nav className="admin-bottom-nav" aria-label="Quick admin navigation">
+          {quickNav.map(({ key, label, href, icon: Icon }) => (
+            <Link key={key} href={href} className={activeKey === key ? "is-active" : ""} aria-current={activeKey === key ? "page" : undefined}>
+              <Icon size={18} aria-hidden="true" />
+              <span>{label.split(" ")[0]}</span>
+            </Link>
+          ))}
+          <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open full admin navigation" aria-expanded={mobileOpen}>
+            <MoreHorizontal size={18} aria-hidden="true" />
+            <span>More</span>
+          </button>
+        </nav>
       </div>
       {mobileOpen ? (
         <div className="admin-mobile-overlay" role="dialog" aria-modal="true" aria-label="Admin navigation" onClick={() => setMobileOpen(false)}>
