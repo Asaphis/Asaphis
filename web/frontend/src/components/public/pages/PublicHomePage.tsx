@@ -68,7 +68,7 @@ export function PublicHomePage({ content }: { content: PublicContent }) {
       <section className="final-cta">
         <div className="site-shell final-cta-inner">
           <div><p className="eyebrow eyebrow-light">The next step is yours</p><h2>Learn something useful. Add something careful.</h2><p>Join a platform designed to become more valuable over time without making the member experience harder to use.</p></div>
-          <div className="final-actions"><RouteCTA href="/join" label="Join the Journey" /><RouteCTA href="/member" label="Member login" variant="outline" className="ap-control-light" /></div>
+          <div className="final-actions"><RouteCTA href="/join" label="Join the Journey" /><RouteCTA href="/login" label="Member login" variant="outline" className="ap-control-light" /></div>
         </div>
       </section>
     </div>

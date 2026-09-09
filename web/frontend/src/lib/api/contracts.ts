@@ -17,8 +17,16 @@ export interface ContentApi {
   getPublishedLandingContent(): Promise<import("@/lib/types").PublicContent>
 }
 
+export interface AuthApi {
+  login(input: { email: string; password: string }): Promise<{
+    token: string
+    memberId: string
+  }>
+  logout(): Promise<{ success: boolean }>
+}
+
 export interface OnboardingApi {
-  detectCurrentCountry(): Promise<{ country: Country; source: "ip" | "demo" }>
+  detectCurrentCountry(): Promise<{ country: Country; source: "ip" | "mock" }>
   sendPhoneCode(input: {
     number: string
     channel: import("@/lib/types").PhoneChannel
@@ -73,4 +81,4 @@ export interface MemberApi {
   }): Promise<SupportRequest>
 }
 
-export type AsaPhisApi = ContentApi & OnboardingApi & MemberApi
+export type AsaPhisApi = ContentApi & AuthApi & OnboardingApi & MemberApi

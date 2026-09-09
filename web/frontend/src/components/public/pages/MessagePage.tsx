@@ -47,7 +47,7 @@ export function MessagePage({ content }: { content: PublicContent }) {
             <Button type="button" size="icon" className="play-control" onClick={toggleVideo} aria-label={videoPlaying ? "Pause featured message" : "Play featured message"}>
               {videoPlaying ? <Pause size={24} fill="currentColor" aria-hidden="true" /> : <Play size={24} fill="currentColor" aria-hidden="true" />}
             </Button>
-            <span className="media-credit">Video preview · {content.featuredMessage.posterAlt.split(" — ")[1]}</span>
+            <span className="media-credit">Video preview · AsaPhis Media</span>
           </div>
           <Card className="message-copy">
             <div className="meta-row"><span>{formatDate(content.featuredMessage.publishedAt)}</span><span className="meta-dot" /><span>{content.featuredMessage.durationMinutes} min watch</span></div>
@@ -62,7 +62,7 @@ export function MessagePage({ content }: { content: PublicContent }) {
       </section>
       <section className="content-section section-light">
         <div className="site-shell transcript-panel" aria-labelledby="transcript-title">
-          <div className="section-heading-row"><div><p className="eyebrow">Transcript</p><h2 id="transcript-title">A message you can return to.</h2></div><span className="demo-chip">Published · {formatDate(content.featuredMessage.publishedAt)}</span></div>
+          <div className="section-heading-row"><div><p className="eyebrow">Transcript</p><h2 id="transcript-title">A message you can return to.</h2></div><span className="status-chip">Published · {formatDate(content.featuredMessage.publishedAt)}</span></div>
           <div className="transcript-copy">{transcript.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</div>
         </div>
       </section>

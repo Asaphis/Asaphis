@@ -1,5 +1,3 @@
-export type PrototypeView = "public" | "join" | "member"
-
 export type MemberPanel =
   | "home"
   | "education"

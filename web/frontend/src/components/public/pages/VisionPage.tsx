@@ -11,7 +11,7 @@ export function VisionPage({ content }: { content: PublicContent }) {
 
   return (
     <div className="public-view public-page">
-      <PublicPageHeader eyebrow="Vision / clear labels" title={content.vision.title} intro={content.vision.intro} action={<RouteCTA href="/education" label="See current work" />} />
+      <PublicPageHeader eyebrow="Vision" title={content.vision.title} intro={content.vision.intro} action={<RouteCTA href="/education" label="See current work" />} />
       <section className="content-section">
         <div className="site-shell">
           <div className="vision-grid vision-page-grid">

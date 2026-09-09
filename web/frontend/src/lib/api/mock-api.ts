@@ -9,12 +9,25 @@ export function createMockApi(seed: DemoData): AsaPhisApi {
     async getPublishedLandingContent() {
       return wait(seed.publicContent)
     },
+    async login(input: { email: string; password: string }) {
+      const email = input.email.trim().toLowerCase()
+      if (!email.includes("@") || input.password.length < 8) {
+        throw new Error("Enter a valid email address and a password of at least 8 characters.")
+      }
+      return wait(
+        { token: `mock-session-${Date.now()}`, memberId: seed.member.memberId },
+        420,
+      )
+    },
+    async logout() {
+      return wait({ success: true }, 180)
+    },
     async detectCurrentCountry() {
-      return wait({ country: "Nigeria", source: "demo" as const })
+      return wait({ country: "Nigeria", source: "mock" as const })
     },
     async sendPhoneCode(input: { number: string; channel: PhoneChannel }) {
       void input
-      return wait({ challengeId: "demo-phone-challenge", resendAfterSeconds: 42 })
+      return wait({ challengeId: "mock-phone-challenge", resendAfterSeconds: 42 })
     },
     async verifyPhoneCode(input: { challengeId: string; code: string }) {
       void input
@@ -35,7 +48,7 @@ export function createMockApi(seed: DemoData): AsaPhisApi {
       method: PaymentMethod
     }) {
       void input
-      return wait({ id: "contribution-demo-1", status: "Successful" as const }, 360)
+      return wait({ id: "contrib-2026-001", status: "Successful" as const }, 360)
     },
     async getActivationStatus() {
       return wait({ active: true, memberId: seed.member.memberId })
@@ -66,7 +79,7 @@ export function createMockApi(seed: DemoData): AsaPhisApi {
     },
     async requestDocumentDownload(id) {
       return wait({
-        fileToken: `demo-file-token-${id}`,
+        fileToken: `file-token-${id}`,
         expiresAt: "2026-09-09T14:00:00.000Z",
       })
     },
@@ -79,7 +92,7 @@ export function createMockApi(seed: DemoData): AsaPhisApi {
     },
     async submitCommunityContribution(input) {
       return wait({
-        id: "submission-demo-2",
+        id: "sub-2026-002",
         title: input.title,
         body: input.body,
         status: "Under Review" as const,
@@ -89,7 +102,7 @@ export function createMockApi(seed: DemoData): AsaPhisApi {
     async createTravelRequest(input) {
       return wait({
         ...input,
-        id: "travel-demo-3",
+        id: "travel-2026-003",
         status: "Pending" as const,
       })
     },
