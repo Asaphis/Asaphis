@@ -1,0 +1,86 @@
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import { Public } from '../../common/decorators/public.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+
+class UpsertContentDto {
+  @IsString() section!: string;
+  @IsString() title!: string;
+  @IsOptional() @IsString() body?: string;
+  @IsOptional() @IsString() visibility?: string;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() sortOrder?: number;
+}
+
+@ApiTags('content')
+@Controller('content')
+export class ContentController {
+  constructor(private prisma: PrismaService) {}
+
+  // Public landing — matches user frontend getPublishedLandingContent shape (aggregated)
+  @Public()
+  @Get('published')
+  async published() {
+    const items = await this.prisma.contentItem.findMany({ where: { status: 'PUBLISHED' }, orderBy: { sortOrder: 'asc' } });
+    const sections = await this.prisma.landingSection.findMany({ where: { visible: true }, orderBy: { sortOrder: 'asc' } });
+    return { items, sections };
+  }
+
+  @Public()
+  @Get('education')
+  async education(@Query('category') category?: string, @Query('search') search?: string) {
+    return this.prisma.contentItem.findMany({
+      where: {
+        status: 'PUBLISHED',
+        section: 'Education',
+        ...(category && category !== 'All' ? { title: { contains: category, mode: 'insensitive' } } : {}),
+        ...(search ? { OR: [{ title: { contains: search, mode: 'insensitive' } }, { body: { contains: search, mode: 'insensitive' } }] } : {}),
+      },
+      orderBy: { sortOrder: 'asc' },
+      take: 100,
+    });
+  }
+
+  @Roles('CONTENT_ADMIN', 'SUPER_ADMIN')
+  @Get('admin')
+  adminList() {
+    return this.prisma.contentItem.findMany({ orderBy: [{ section: 'asc' }, { sortOrder: 'asc' }], take: 200 });
+  }
+
+  @Roles('CONTENT_ADMIN', 'SUPER_ADMIN')
+  @Post()
+  async create(@Body() dto: UpsertContentDto, @CurrentUser() admin: { email: string }) {
+    const row = await this.prisma.contentItem.create({
+      data: { section: dto.section, title: dto.title, body: dto.body ?? '', visibility: (dto.visibility as never) ?? 'PUBLIC', status: (dto.status as never) ?? 'DRAFT', sortOrder: dto.sortOrder ?? 0, updatedBy: admin.email },
+    });
+    await this.prisma.contentVersion.create({ data: { contentId: row.id, version: 1, snapshot: row as never, summary: 'Created', changedBy: admin.email } });
+    return row;
+  }
+
+  @Roles('CONTENT_ADMIN', 'SUPER_ADMIN')
+  @Patch(':id/status')
+  async setStatus(@Param('id') id: string, @Body() body: { status: string }, @CurrentUser() admin: { email: string }) {
+    const row = await this.prisma.contentItem.update({ where: { id }, data: { status: body.status as never, updatedBy: admin.email, publishedAt: body.status === 'PUBLISHED' ? new Date() : undefined } });
+    const count = await this.prisma.contentVersion.count({ where: { contentId: id } });
+    await this.prisma.contentVersion.create({ data: { contentId: id, version: count + 1, snapshot: row as never, summary: `Status -> ${body.status}`, changedBy: admin.email } });
+    await this.prisma.adminAuditLog.create({ data: { adminEmail: admin.email, action: 'content.status', target: id, newState: { status: body.status } as never } });
+    return row;
+  }
+
+  @Roles('CONTENT_ADMIN', 'SUPER_ADMIN')
+  @Post(':id/restore/:version')
+  async restore(@Param('id') id: string, @Param('version') version: string, @CurrentUser() admin: { email: string }) {
+    const v = await this.prisma.contentVersion.findUniqueOrThrow({ where: { contentId_version: { contentId: id, version: Number(version) } } });
+    const snap = v.snapshot as Record<string, never>;
+    return this.prisma.contentItem.update({ where: { id }, data: { title: snap['title'], body: snap['body'], status: snap['status'], visibility: snap['visibility'], updatedBy: admin.email } });
+  }
+
+  @Roles('CONTENT_ADMIN', 'SUPER_ADMIN')
+  @Get(':id/versions')
+  versions(@Param('id') id: string) {
+    return this.prisma.contentVersion.findMany({ where: { contentId: id }, orderBy: { version: 'desc' } });
+  }
+}

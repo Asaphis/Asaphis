@@ -1,0 +1,796 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============ Enums ============
+
+enum UserRole {
+  MEMBER
+  TRUSTED_MEMBER
+  MODERATOR
+  CONTENT_ADMIN
+  FINANCE_ADMIN
+  SECURITY_ADMIN
+  SUPER_ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  LIMITED
+  VERIFICATION_REQUIRED
+  TRAVEL_RESTRICTED
+  COMMENT_RESTRICTED
+  SUBMISSION_RESTRICTED
+  UPLOAD_RESTRICTED
+  PAYMENT_RESTRICTED
+  SECURITY_HOLD
+  SUSPENDED
+  BANNED
+}
+
+enum MembershipStage {
+  REGISTERED
+  PHONE_VERIFICATION
+  IDENTITY_VERIFICATION
+  ELIGIBILITY_CHECK
+  SECURITY_CHECK
+  CONTRIBUTION
+  ACTIVE_MEMBER
+}
+
+enum IdentityStatus {
+  NOT_STARTED
+  PHONE_VERIFIED
+  SUBMITTED
+  PROCESSING
+  VERIFIED
+  FAILED
+  NEEDS_REVIEW
+  REJECTED
+  EXPIRED
+}
+
+enum PhoneChannel {
+  SMS
+  WHATSAPP
+  VOICE
+  EMAIL
+}
+
+enum VerificationResult {
+  PENDING
+  VERIFIED
+  FAILED
+  NEEDS_REVIEW
+  REJECTED
+  EXPIRED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AccessDecision {
+  ALLOW
+  DENY
+  REQUIRE_MFA
+  REQUIRE_VERIFICATION
+  LIMITED_ACCESS
+  MANUAL_REVIEW
+  TEMPORARY_RESTRICTION
+}
+
+enum ContentVisibility {
+  PUBLIC
+  MEMBER
+  VERIFIED_MEMBER
+  TRUSTED_MEMBER
+  INTERNAL
+  ADMIN
+}
+
+enum ContentStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  HIDDEN
+  ARCHIVED
+  REJECTED
+  CHANGES_REQUESTED
+}
+
+enum TravelStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+  REVOKED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCESSFUL
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum NotificationChannel {
+  IN_APP
+  PUSH
+  EMAIL
+  SMS
+  WHATSAPP
+}
+
+enum SupportStatus {
+  OPEN
+  WAITING
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum RestrictionType {
+  LIMITED
+  VERIFICATION_REQUIRED
+  TRAVEL_RESTRICTED
+  COMMENT_RESTRICTED
+  SUBMISSION_RESTRICTED
+  UPLOAD_RESTRICTED
+  PAYMENT_RESTRICTED
+  SECURITY_HOLD
+  SUSPENDED
+  BANNED
+}
+
+// ============ Identity / users ============
+
+model User {
+  id               String          @id @default(cuid())
+  email            String          @unique
+  emailVerifiedAt  DateTime?
+  phone            String?
+  phoneVerifiedAt  DateTime?
+  passwordHash     String?
+  roles            UserRole[]      @default([MEMBER])
+  accountStatus    AccountStatus   @default(ACTIVE)
+  membershipStage  MembershipStage @default(REGISTERED)
+  termsAcceptedAt  DateTime?
+  privacyAcceptedAt DateTime?
+  mfaEnabled       Boolean         @default(false)
+  mfaSecret        String?
+  failedLoginCount Int             @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  deletedAt        DateTime?
+
+  member              Member?
+  devices             Device[]
+  sessions            Session[]
+  identityProfile     IdentityProfile?
+  phoneVerifications  PhoneVerification[]
+  travelRequests      TravelRequest[]
+  restrictions        Restriction[]
+  supportRequests     SupportRequest[]
+  payments            Payment[]
+  notifications       Notification[]
+  notificationPrefs   NotificationPreference?
+  accessDecisions     AccessDecisionLog[]
+  riskEvents          RiskEvent[]
+  auditLogs           AuditLog[]
+  files               FileAsset[]
+
+  @@index([email])
+  @@index([accountStatus])
+}
+
+model Member {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memberCode      String   @unique // e.g. MEM-NG-240918
+  displayName     String
+  initials        String?
+  citizenshipCountry String? // verified eligibility country code
+  currentCountry  String?
+  joinedAt        DateTime @default(now())
+  activatedAt     DateTime?
+  trustStatus     String   @default("standard") // trusted|standard|watch|restricted
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([memberCode])
+  @@index([citizenshipCountry])
+}
+
+model Country {
+  code               String   @id // ISO-2 e.g. NG
+  name               String
+  enabled            Boolean  @default(true)
+  allowedDocuments   String[] @default([])
+  verificationProvider String @default("mock")
+  govIdCheckEnabled  Boolean  @default(false)
+  phoneRequired      Boolean  @default(true)
+  livenessRequired   Boolean  @default(true)
+  manualReview       Boolean  @default(true)
+  eligibilityRule    String   @default("")
+  travelRule         String   @default("")
+  accessRule         String   @default("")
+  currency           String   @default("USD")
+  contributionAmount Decimal? @db.Decimal(12, 2)
+  paymentProviders   String[] @default([])
+  paymentMethods     String[] @default([])
+  usesGlobalFallback Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model CountryRule {
+  id        String   @id @default(cuid())
+  countryCode String
+  key       String   // e.g. ALLOWED_ID_DOCS, PHONE_REQUIRED
+  value     Json
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([countryCode, key])
+}
+
+model VerificationProvider {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  kind             String   // phone | identity | payment
+  enabled          Boolean  @default(true)
+  priority         Int      @default(100)
+  config           Json     @default("{}")
+  secretConfigured Boolean  @default(false)
+  lastTestedAt     DateTime?
+  lastTestResult   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model PhoneVerification {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone        String
+  channel      PhoneChannel @default(SMS)
+  provider     String       @default("mock")
+  otpHash      String
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  attempts     Int          @default(0)
+  maxAttempts  Int          @default(5)
+  resendCount  Int          @default(0)
+  lastSentAt   DateTime     @default(now())
+  ip           String?
+  deviceId     String?
+  createdAt    DateTime     @default(now())
+
+  @@index([userId, createdAt])
+  @@index([phone])
+}
+
+model IdentityProfile {
+  id                 String         @id @default(cuid())
+  userId             String         @unique
+  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  countryCode        String?
+  documentType       String?
+  status             IdentityStatus @default(NOT_STARTED)
+  verifiedAt         DateTime?
+  expiresAt          DateTime?
+  provider           String         @default("mock")
+  providerReference  String?
+  matchScore         Decimal?       @db.Decimal(5, 4)
+  // PII minimisation: store only hashes / last4 where possible
+  documentHash       String?
+  idNumberLast4      String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  verifications IdentityVerification[]
+  documents     IdentityDocument[]
+}
+
+model IdentityVerification {
+  id              String            @id @default(cuid())
+  profileId       String
+  profile         IdentityProfile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  provider        String            @default("mock")
+  status          VerificationResult @default(PENDING)
+  resultSummary   String?
+  rawResponse     Json?
+  riskIndicators  String[]          @default([])
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewNote      String?
+  createdAt       DateTime          @default(now())
+
+  @@index([profileId, createdAt])
+}
+
+model IdentityDocument {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     IdentityProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  fileId      String
+  file        FileAsset @relation(fields: [fileId], references: [id])
+  documentType String
+  mimeType    String
+  sizeBytes   Int
+  checksum    String?
+  createdAt   DateTime @default(now())
+}
+
+// ============ Devices / sessions / risk ============
+
+model Device {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceKey   String   // hashed credential / fingerprint
+  label       String?
+  deviceType  String?
+  os          String?
+  browser     String?
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  lastIp      String?
+  lastCountry String?
+  trusted     Boolean  @default(false)
+  revokedAt   DateTime?
+  riskLevel   RiskLevel @default(LOW)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, deviceKey])
+  @@index([userId, lastSeenAt])
+  sessions Session[]
+}
+
+model Session {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId     String?
+  device       Device?   @relation(fields: [deviceId], references: [id])
+  refreshHash  String    @unique
+  ip           String?
+  country      String?
+  browser      String?
+  os           String?
+  createdAt    DateTime  @default(now())
+  lastActiveAt DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  riskLevel    RiskLevel @default(LOW)
+
+  @@index([userId, expiresAt])
+  @@index([refreshHash])
+}
+
+model RiskEvent {
+  id               String    @id @default(cuid())
+  userId           String?
+  user             User?     @relation(fields: [userId], references: [id])
+  sessionId        String?
+  type             String
+  signals          Json      @default("{}")
+  previousCountry  String?
+  currentCountry   String?
+  level            RiskLevel @default(LOW)
+  status           String    @default("open") // open|reviewing|resolved
+  createdAt        DateTime  @default(now())
+
+  @@index([userId, createdAt])
+  @@index([level, status])
+}
+
+model RiskScore {
+  id        String    @id @default(cuid())
+  userId    String
+  sessionId String?
+  level     RiskLevel
+  score     Int
+  reasons   String[]  @default([])
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}
+
+model AccessPolicy {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  enabled     Boolean  @default(true)
+  rules       Json
+  priority    Int      @default(100)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AccessDecisionLog {
+  id         String         @id @default(cuid())
+  userId     String?
+  user       User?          @relation(fields: [userId], references: [id])
+  action     String
+  resource   String?
+  decision   AccessDecision
+  reasons    String[]       @default([])
+  context    Json           @default("{}")
+  createdAt  DateTime       @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, decision])
+}
+
+// ============ Travel / restrictions / support ============
+
+model TravelRequest {
+  id                    String       @id @default(cuid())
+  userId                String
+  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifiedCountry       String?
+  currentIpCountry      String?
+  destination           String
+  startDate             DateTime
+  endDate               DateTime
+  reason                String
+  additionalInformation String?
+  status                TravelStatus @default(PENDING)
+  decidedBy             String?
+  decidedAt             DateTime?
+  decisionNote          String?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+
+  grants TravelAccessGrant[]
+
+  @@index([userId, status])
+}
+
+model TravelAccessGrant {
+  id              String   @id @default(cuid())
+  travelRequestId String
+  request         TravelRequest @relation(fields: [travelRequestId], references: [id], onDelete: Cascade)
+  userId          String
+  destination     String
+  startsAt        DateTime
+  endsAt          DateTime
+  features        String[] @default([])
+  revokedAt       DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([userId, endsAt])
+}
+
+model Restriction {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type             RestrictionType
+  reason           String
+  affectedFeatures String[]        @default([])
+  appliedBy        String
+  appliedAt        DateTime        @default(now())
+  expiresAt        DateTime?
+  liftedAt         DateTime?
+  liftedBy         String?
+  active           Boolean         @default(true)
+
+  history RestrictionHistory[]
+
+  @@index([userId, active])
+}
+
+model RestrictionHistory {
+  id            String      @id @default(cuid())
+  restrictionId String
+  restriction   Restriction @relation(fields: [restrictionId], references: [id], onDelete: Cascade)
+  action        String
+  actor         String
+  note          String?
+  previousState Json?
+  newState      Json?
+  createdAt     DateTime    @default(now())
+}
+
+model SupportRequest {
+  id        String        @id @default(cuid())
+  userId    String?
+  user      User?         @relation(fields: [userId], references: [id])
+  email     String?
+  category  String
+  subject   String
+  status    SupportStatus @default(OPEN)
+  priority  String        @default("normal")
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  messages SupportMessage[]
+
+  @@index([status, createdAt])
+  @@index([userId])
+}
+
+model SupportMessage {
+  id        String         @id @default(cuid())
+  requestId String
+  request   SupportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author    String // member | admin name
+  authorRole String @default("member")
+  body      String
+  createdAt DateTime @default(now())
+}
+
+// ============ Content / community / moderation ============
+
+model ContentItem {
+  id           String          @id @default(cuid())
+  section      String
+  title        String
+  kind         String          @default("Article")
+  body         String          @default("")
+  mediaUrls    String[]        @default([])
+  status       ContentStatus   @default(DRAFT)
+  visibility   ContentVisibility @default(PUBLIC)
+  sortOrder    Int             @default(0)
+  scheduledFor DateTime?
+  publishedAt  DateTime?
+  updatedBy    String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  versions ContentVersion[]
+
+  @@index([status, visibility])
+  @@index([section, sortOrder])
+}
+
+model ContentVersion {
+  id        String      @id @default(cuid())
+  contentId String
+  content   ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  version   Int
+  snapshot  Json
+  summary   String?
+  changedBy String?
+  createdAt DateTime    @default(now())
+
+  @@unique([contentId, version])
+}
+
+model LandingSection {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  title     String
+  visible   Boolean  @default(true)
+  sortOrder Int      @default(0)
+  config    Json     @default("{}")
+  updatedAt DateTime @updatedAt
+}
+
+model ContentSubmission {
+  id           String        @id @default(cuid())
+  authorId     String?
+  authorName   String?
+  title        String
+  body         String
+  mediaUrls    String[]      @default([])
+  status       ContentStatus @default(SUBMITTED)
+  reviewerNote String?
+  decidedBy    String?
+  decidedAt    DateTime?
+  scheduledFor DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  authorId  String?
+  authorName String?
+  targetKind String  // content | submission | journal
+  targetId  String
+  parentId  String?
+  body      String
+  status    String   @default("pending") // approved|pending|flagged|hidden
+  flags     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([targetKind, targetId])
+  @@index([status])
+}
+
+model ModerationAction {
+  id         String   @id @default(cuid())
+  actor      String
+  actorRole  String?
+  targetKind String
+  targetId   String
+  action     String
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([targetKind, targetId])
+}
+
+model CommunitySetting {
+  id     String @id @default(cuid())
+  key    String @unique
+  value  Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
+
+// ============ Notifications ============
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String?
+  user      User?               @relation(fields: [userId], references: [id])
+  category  String
+  title     String
+  body      String
+  channel   NotificationChannel @default(IN_APP)
+  audience  String              @default("member")
+  read      Boolean             @default(false)
+  scheduledFor DateTime?
+  sentAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, read])
+  @@index([category])
+}
+
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inApp     Boolean  @default(true)
+  push      Boolean  @default(false)
+  email     Boolean  @default(true)
+  sms       Boolean  @default(false)
+  whatsapp  Boolean  @default(false)
+  categories Json    @default("{}")
+  updatedAt DateTime @updatedAt
+}
+
+// ============ Payments ============
+
+model PaymentConfiguration {
+  id           String   @id @default(cuid())
+  countryCode  String   // ISO-2 or GLOBAL
+  currency     String
+  amount       Decimal  @db.Decimal(12, 2)
+  providers    String[] @default([])
+  methods      String[] @default([])
+  providerPriority String[] @default([])
+  enabled      Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([countryCode, currency])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id])
+  countryCode     String?
+  amount          Decimal       @db.Decimal(12, 2)
+  currency        String
+  method          String?
+  provider        String?
+  providerReference String?     @unique
+  status          PaymentStatus @default(PENDING)
+  webhookVerified Boolean       @default(false)
+  metadata        Json          @default("{}")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// ============ Files ============
+
+model FileAsset {
+  id         String   @id @default(cuid())
+  ownerId    String?
+  owner      User?    @relation(fields: [ownerId], references: [id])
+  kind       String   // community | identity | content | document
+  bucket     String
+  objectKey  String
+  mimeType   String
+  sizeBytes  Int
+  checksum   String?
+  scanStatus String   @default("pending") // pending|clean|infected|skipped
+  private    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  identityDocs IdentityDocument[]
+
+  @@index([ownerId])
+}
+
+// ============ Analytics / audit / settings ============
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String?
+  props     Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  actorRole String?
+  action    String
+  target    String?
+  ip        String?
+  userAgent String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([actorId])
+}
+
+model AdminAuditLog {
+  id            String   @id @default(cuid())
+  adminEmail    String
+  adminRole     String?
+  action        String
+  target        String?
+  previousState Json?
+  newState      Json?
+  ip            String?
+  reason        String?
+  createdAt     DateTime @default(now())
+
+  @@index([adminEmail, createdAt])
+  @@index([action])
+}
+
+model FeatureFlag {
+  key         String   @id
+  enabled     Boolean  @default(false)
+  description String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+}
