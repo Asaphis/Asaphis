@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { PublicShell } from "@/components/public/PublicShell"
-import { PublicHomePage } from "@/components/public/pages/PublicHomePage"
+import { PublicHomeLoader } from "@/components/public/PublicHomeLoader"
 import { demoData } from "@/lib/mock-data"
 
 export const metadata: Metadata = {
@@ -9,5 +9,7 @@ export const metadata: Metadata = {
 }
 
 export default function HomePage() {
-  return <PublicShell><PublicHomePage content={demoData.publicContent} /></PublicShell>
+  // Dynamic: loader calls GET /content/published via NEXT_PUBLIC_API_BASE_URL,
+  // falls back to demoData (old content) until admin republishes.
+  return <PublicShell><PublicHomeLoader fallback={demoData.publicContent} /></PublicShell>
 }

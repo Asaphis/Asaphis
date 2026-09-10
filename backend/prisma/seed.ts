@@ -49,6 +49,28 @@ async function main() {
     await prisma.landingSection.upsert({ where: { key }, create: { key, title, visible: true, sortOrder: order }, update: {} });
   }
 
+  // Preserve old frontend mock content as real DB rows so landing keeps serving
+  // after switching to GET /content/published. Admin can edit/publish from /content.
+  const legacyContent = [
+    { section: 'hero', title: 'A serious home for African education and shared progress.', body: 'A home for African education, community knowledge, and the people carrying it forward.', sortOrder: 0 },
+    { section: 'message', title: 'Knowledge is a shared responsibility.', body: 'A message on building trusted knowledge together.', sortOrder: 1 },
+    { section: 'about', title: 'A long-term home for learning and participation.', body: 'AsaPhis makes African education, community knowledge, and thoughtful participation easier to find and carry forward.', sortOrder: 2 },
+    { section: 'vision', title: 'Build the foundation before the horizon.', body: 'See what exists today and what comes next.', sortOrder: 3 },
+    { section: 'education', title: 'How to keep context when a story travels', body: 'A guide to reading historical material with context.', sortOrder: 10 },
+    { section: 'education', title: 'A community note is more than a post', body: 'What makes a community contribution ready to share.', sortOrder: 11 },
+    { section: 'education', title: 'Designing technology for people who need it', body: 'A primer on clear, accountable digital systems.', sortOrder: 12 },
+    { section: 'support', title: 'Support keeps the foundation open.', body: 'Contributions support education, moderation, and secure member access.', sortOrder: 20 },
+    { section: 'community', title: 'Community, with care.', body: 'Read, comment, reply, react, and submit through a visible review process.', sortOrder: 30 },
+  ] as const;
+  for (const c of legacyContent) {
+    const existing = await prisma.contentItem.findFirst({ where: { section: c.section, title: c.title } });
+    if (!existing) {
+      await prisma.contentItem.create({
+        data: { section: c.section, title: c.title, body: c.body, visibility: 'PUBLIC', status: 'PUBLISHED', sortOrder: c.sortOrder, updatedBy: 'seed' } as never,
+      });
+    }
+  }
+
   const email = process.env.SEED_ADMIN_EMAIL ?? 'admin@asaphis.org';
   const password = process.env.SEED_ADMIN_PASSWORD ?? 'ChangeMe123!';
   const hash = await bcrypt.hash(password, 12);

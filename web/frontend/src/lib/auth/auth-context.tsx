@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createMockApi } from "@/lib/api/mock-api";
+import { createApi } from "@/lib/api/api-factory";
 import { demoData } from "@/lib/mock-data";
 
 export interface AuthSession {
@@ -67,7 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const api = createMockApi(demoData);
+      // Real: POST /auth/login via NEXT_PUBLIC_API_BASE_URL when set,
+      // fallback to mock when backend unreachable (keeps old flow working).
+      const api = createApi();
       const result = await api.login({ email, password });
       persist({
         token: result.token,
@@ -91,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      const api = createMockApi(demoData);
+      const api = createApi();
       await api.logout();
     } finally {
       persist(null);

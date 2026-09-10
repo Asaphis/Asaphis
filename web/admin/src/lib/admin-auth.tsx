@@ -92,6 +92,35 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       if (!clean.includes("@") || password.length < 8) {
         throw new Error("Enter a valid work email and a password of at least 8 characters.");
       }
+      // Real: POST /auth/login when NEXT_PUBLIC_API_BASE_URL is set.
+      // Role comes from backend JWT - requested role is dev fallback only.
+      const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
+      if (base) {
+        try {
+          const res = await fetch(`${base}/api/v1/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ email: clean, password }),
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { accessToken?: string; token?: string };
+            const token = data.accessToken ?? data.token ?? "";
+            if (token) {
+              try {
+                window.localStorage.setItem("asaphis-admin-token", token);
+              } catch {
+                // ignore
+              }
+            }
+            const name = clean.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+            persist({ name, email: clean, role });
+            return;
+          }
+        } catch {
+          // fall through to local session so UI stays usable offline
+        }
+      }
       await new Promise((resolve) => setTimeout(resolve, 350));
       const name = clean.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
       persist({ name, email: clean, role });
@@ -115,7 +144,14 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const logout = useCallback(() => persist(null), [persist]);
+  const logout = useCallback(() => {
+    try {
+      window.localStorage.removeItem("asaphis-admin-token");
+    } catch {
+      // ignore
+    }
+    persist(null);
+  }, [persist]);
 
   const can = useCallback((area: AdminArea) => (admin ? roleAccess[admin.role].includes(area) : false), [admin]);
 
