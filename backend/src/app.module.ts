@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { BullModule } from '@nestjs/bullmq';
 import configuration from './config/configuration';
@@ -36,6 +37,10 @@ import { RolesGuard } from './common/guards/roles.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    // Global JwtService: APP_GUARDs (JwtAuthGuard) are instantiated in the root
+    // injector, so the JwtService they depend on must be visible there — not
+    // only inside AuthModule's JwtModule.register({}).
+    JwtModule.register({ global: true }),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 120 }]),
     BullModule.forRoot({
       connection: { url: process.env.REDIS_URL ?? 'redis://localhost:6379' },
