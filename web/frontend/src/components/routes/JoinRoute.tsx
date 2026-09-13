@@ -3,14 +3,14 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { JoinJourney } from "@/components/onboarding/JoinJourney";
-import { createMockApi } from "@/lib/api/mock-api";
-import { demoData } from "@/lib/mock-data";
+import { createApi } from "@/lib/api/api-factory";
 import { useAuth } from "@/lib/auth/auth-context";
 
 export function JoinRoute() {
   const router = useRouter();
   const { completeSignup } = useAuth();
-  const api = useMemo(() => createMockApi(demoData), []);
+  // Real API when env is set so onboarding (phone/identity/payment) is live.
+  const api = useMemo(() => createApi(), []);
 
   return (
     <div className="app-root">
@@ -21,8 +21,8 @@ export function JoinRoute() {
         <JoinJourney
           api={api}
           onBackToPublic={() => router.push("/")}
-          onActivated={(email) => {
-            completeSignup(email);
+          onActivated={async (email) => {
+            await completeSignup(email);
             router.push("/member");
           }}
         />

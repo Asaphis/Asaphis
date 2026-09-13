@@ -22,6 +22,19 @@ export interface AuthApi {
     token: string
     memberId: string
   }>
+  register(input: {
+    name: string
+    email: string
+    password: string
+    phone?: string
+    countryOfCitizenship?: string
+  }): Promise<{ userId: string; memberId?: string; stage?: string }>
+  requestPasswordReset(email: string): Promise<{ ok: boolean }>
+  resetPassword(input: { token: string; password: string }): Promise<{ ok: boolean }>
+  changePassword(input: {
+    currentPassword: string
+    newPassword: string
+  }): Promise<{ ok: boolean }>
   logout(): Promise<{ success: boolean }>
 }
 
@@ -79,6 +92,11 @@ export interface MemberApi {
     subject: string
     message: string
   }): Promise<SupportRequest>
+  listSupportRequests(): Promise<SupportRequest[]>
+  getPaymentConfig(): Promise<
+    { countryCode: string; currency: string; amount: number; providers: string[]; methods: string[] }[]
+  >
+  uploadFile(kind: string, file: File): Promise<{ fileId: string; fileToken: string }>
 }
 
 export type AsaPhisApi = ContentApi & AuthApi & OnboardingApi & MemberApi

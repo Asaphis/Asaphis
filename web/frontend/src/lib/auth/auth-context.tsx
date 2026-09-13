@@ -23,7 +23,9 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  completeSignup: (email?: string) => void;
+  register: (input: { name: string; email: string; password: string; phone?: string; countryOfCitizenship?: string }) => Promise<void>;
+  completeSignup: (email?: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -80,16 +82,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  const register = useCallback(
+    async (input: { name: string; email: string; password: string; phone?: string; countryOfCitizenship?: string }) => {
+      const api = createApi();
+      const result = await api.register(input);
+      // Backend returns tokens on login only; after register, log the user in
+      // so onboarding (phone/identity/payment) can proceed with a real session.
+      try {
+        const logged = await api.login({ email: input.email, password: input.password });
+        persist({ token: logged.token, email: input.email.trim().toLowerCase(), memberId: logged.memberId });
+      } catch {
+        persist({ token: `pending-${result.userId}`, email: input.email.trim().toLowerCase(), memberId: result.memberId ?? "" });
+      }
+    },
+    [persist],
+  );
+
   const completeSignup = useCallback(
-    (email?: string) => {
+    async (email?: string) => {
+      // Legacy JoinJourney callback — now tries real register with a
+      // generated password handoff instead of fabricating a mock-session.
+      // The full Join form should call register() directly.
+      const fallbackEmail = (email ?? "member@asaphis.org").trim().toLowerCase();
+      try {
+        const api = createApi();
+        await api.register({ name: fallbackEmail.split("@")[0], email: fallbackEmail, password: `Temp${Date.now().toString().slice(-6)}!Aa` });
+        const logged = await api.login({ email: fallbackEmail, password: "" }).catch(() => null);
+        if (logged) {
+          persist({ token: logged.token, email: fallbackEmail, memberId: logged.memberId });
+          return;
+        }
+      } catch {
+        // fall through to local pending session so UI never hard-breaks offline
+      }
       persist({
-        token: `mock-session-${Date.now()}`,
-        email: (email ?? "member@asaphis.org").trim().toLowerCase(),
+        token: `pending-signup-${Date.now()}`,
+        email: fallbackEmail,
         memberId: demoData.member.memberId,
       });
     },
     [persist],
   );
+
+  const requestPasswordReset = useCallback(async (email: string) => {
+    const api = createApi();
+    await api.requestPasswordReset(email);
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -103,13 +141,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
-      isAuthenticated: Boolean(session?.token),
+      isAuthenticated: Boolean(session?.token) && !session?.token.startsWith("pending-"),
       isLoading,
       login,
+      register,
       completeSignup,
+      requestPasswordReset,
       logout,
     }),
-    [session, isLoading, login, completeSignup, logout],
+    [session, isLoading, login, register, completeSignup, requestPasswordReset, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

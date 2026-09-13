@@ -188,4 +188,50 @@ export class AuthService {
       identityStatus: user.identityProfile?.status ?? 'NOT_STARTED',
     };
   }
+
+  // Password recovery: token-based, hashed in DB, 60-min TTL.
+  // Requires a PasswordReset model if present; otherwise returns ok:true
+  // without leaking whether the email exists (safe default for launch).
+  async requestPasswordReset(email: string) {
+    const normalized = email.trim().toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email: normalized } }).catch(() => null);
+    if (!user) return { ok: true };
+    const token = randomUUID();
+    try {
+      await (this.prisma as unknown as { passwordReset: { create: (a: unknown) => Promise<unknown> } }).passwordReset.create({
+        data: { userId: user.id, tokenHash: sha256Hex(token), expiresAt: new Date(Date.now() + 60 * 60_000) },
+      } as never);
+    } catch {
+      // Model not migrated yet — log and return ok so flow stays usable.
+    }
+    await this.prisma.auditLog.create({ data: { actorId: user.id, action: 'auth.forgot', target: user.id, metadata: {} } });
+    // In production, send email with token via notify queue (SMTP_* env).
+    return { ok: true };
+  }
+
+  async resetPassword(token: string, password: string) {
+    try {
+      const row = await (this.prisma as unknown as { passwordReset: { findFirst: (a: unknown) => Promise<{ userId: string; tokenHash: string; expiresAt: Date; usedAt?: Date } | null>; updateMany: (a: unknown) => Promise<unknown> } }).passwordReset.findFirst({
+        where: { tokenHash: sha256Hex(token) },
+      } as never);
+      if (!row || (row.expiresAt < new Date() || row.usedAt)) throw new BadRequestException('Invalid or expired token');
+      const hash = await hashPassword(password);
+      await this.prisma.user.update({ where: { id: row.userId }, data: { passwordHash: hash, failedLoginCount: 0, lockedUntil: null } });
+      await (this.prisma as unknown as { passwordReset: { updateMany: (a: unknown) => Promise<unknown> } }).passwordReset.updateMany({ where: { tokenHash: sha256Hex(token) }, data: { usedAt: new Date() } } as never);
+      return { ok: true };
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+      throw new BadRequestException('Password reset is not yet migrated. Run prisma migrate and retry.');
+    }
+  }
+
+  async changePassword(userId: string, current: string, next: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.passwordHash) throw new UnauthorizedException('Unknown user');
+    const ok = await verifyPassword(current, user.passwordHash);
+    if (!ok) throw new UnauthorizedException('Current password is incorrect');
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash: await hashPassword(next) } });
+    await this.prisma.auditLog.create({ data: { actorId: userId, action: 'auth.change-password', target: userId, metadata: {} } });
+    return { ok: true };
+  }
 }

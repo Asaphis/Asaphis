@@ -30,6 +30,26 @@ function createRealAdminApi(): AdminApi {
     getIdentityCase: (id) => withFallback(() => adminFetch(`/identity/cases`), () => fallback.getIdentityCase(id)).then((v) => (Array.isArray(v) ? (v as never[])[0] : v) as never) as never,
     reviewIdentityCase: (id, action, note) => withFallback(() => adminFetch(`/identity/cases/${id}/review`, { method: "POST", body: JSON.stringify({ action, note }) }), () => fallback.reviewIdentityCase(id, action, note)),
     listContent: () => withFallback(() => adminFetch("/content/admin"), () => fallback.listContent()),
+    createContent: (input) => withFallback(() => adminFetch("/content", { method: "POST", body: JSON.stringify(input) }), () => fallback.createContent(input)),
+    uploadFile: (kind, file) => {
+      const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
+      if (!base) return fallback.uploadFile(kind, file);
+      const run = async () => {
+        const token = typeof window !== "undefined" ? window.localStorage.getItem("asaphis-admin-token") : null;
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch(`${base}/api/v1/files/upload/${encodeURIComponent(kind)}`, {
+          method: "POST",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: "include",
+          body: form,
+        });
+        if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+        return res.json();
+      };
+      return withFallback(run, () => fallback.uploadFile(kind, file));
+    },
+    deleteContent: (id) => withFallback(() => adminFetch(`/content/${id}`, { method: "DELETE" }).then(() => ({ ok: true })), () => fallback.deleteContent(id)),
     updateContentStatus: (id, status) => {
       const map: Record<string, string> = { published: "PUBLISHED", hidden: "HIDDEN", draft: "DRAFT", scheduled: "SCHEDULED", archived: "ARCHIVED" };
       return withFallback(() => adminFetch(`/content/${id}/status`, { method: "PATCH", body: JSON.stringify({ status: map[status] ?? status }) }), () => fallback.updateContentStatus(id, status));

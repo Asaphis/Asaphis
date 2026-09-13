@@ -38,8 +38,10 @@ export class PaymentsController {
       : null;
     const fallback = specific ?? (await this.prisma.paymentConfiguration.findFirst({ where: { countryCode: 'GLOBAL', currency: dto.currency } }));
     const row = await this.prisma.payment.create({
-      data: { userId: user.sub, amount: dto.amount, currency: dto.currency, method: dto.method, provider: fallback?.providers?.[0] ?? 'mock', countryCode: dto.countryCode?.toUpperCase(), status: 'PENDING', metadata: { configId: fallback?.id } as never },
+      data: { userId: user.sub, amount: dto.amount, currency: dto.currency, method: dto.method, provider: fallback?.providers?.[0] ?? 'mock', providerReference: undefined, countryCode: dto.countryCode?.toUpperCase(), status: 'PENDING', metadata: { configId: fallback?.id } as never },
     });
+    // Store providerReference=id so webhook {reference:id} can match.
+    await this.prisma.payment.update({ where: { id: row.id }, data: { providerReference: row.id } }).catch(() => null);
     return { id: row.id, status: 'Pending' as const, provider: row.provider };
   }
 
@@ -51,7 +53,9 @@ export class PaymentsController {
       return { ok: false, reason: 'bad_signature' };
     }
     const success = ['success', 'successful', 'paid'].includes(dto.status.toLowerCase());
-    const payment = await this.prisma.payment.findFirst({ where: { providerReference: dto.reference } }).catch(() => null);
+    // Match by providerReference OR by payment id (create() now stores
+    // providerReference=id so test webhooks can confirm without a provider).
+    const payment = await this.prisma.payment.findFirst({ where: { OR: [{ providerReference: dto.reference }, { id: dto.reference }] } }).catch(() => null);
     if (!payment) return { ok: true, matched: false };
     await this.prisma.payment.update({ where: { id: payment.id }, data: { status: success ? 'SUCCESSFUL' : 'FAILED', webhookVerified: true } });
     if (success && payment.userId) {
@@ -71,5 +75,19 @@ export class PaymentsController {
   @Patch('admin/countries/:id')
   updateCountry(@Param('id') id: string, @Body() patch: { amount?: number }) {
     return this.prisma.paymentConfiguration.update({ where: { id }, data: { amount: patch.amount } });
+  }
+
+  // Manual verify for bank-transfer / admin-confirmed payments.
+  @Roles('FINANCE_ADMIN', 'SUPER_ADMIN')
+  @Post('admin/:id/verify')
+  async verify(@Param('id') id: string, @Body() body: { status: string }, @CurrentUser() admin: { email: string }) {
+    const success = ['success', 'successful', 'paid', 'approved'].includes(String(body.status).toLowerCase());
+    const row = await this.prisma.payment.update({ where: { id }, data: { status: success ? 'SUCCESSFUL' : 'FAILED', webhookVerified: false } });
+    if (success && row.userId) {
+      await this.prisma.user.update({ where: { id: row.userId }, data: { membershipStage: 'ACTIVE_MEMBER' } });
+      await this.prisma.member.updateMany({ where: { userId: row.userId }, data: { activatedAt: new Date() } });
+    }
+    await this.prisma.adminAuditLog.create({ data: { adminEmail: admin.email, action: 'payment.verify', target: id, newState: { status: body.status } as never } });
+    return row;
   }
 }

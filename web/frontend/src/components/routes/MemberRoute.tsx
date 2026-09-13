@@ -3,14 +3,15 @@
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { MemberPlatform } from "@/components/member/MemberPlatform";
-import { createMockApi } from "@/lib/api/mock-api";
+import { createApi } from "@/lib/api/api-factory";
 import { demoData } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth/auth-context";
 
 export function MemberRoute() {
   const router = useRouter();
   const { isAuthenticated, isLoading, logout } = useAuth();
-  const api = useMemo(() => createMockApi(demoData), []);
+  // Real API when NEXT_PUBLIC_API_BASE_URL is set, mock fallback otherwise.
+  const api = useMemo(() => createApi(), []);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {

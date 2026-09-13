@@ -19,6 +19,9 @@ export default function ContentPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState("Items");
   const [versionsFor, setVersionsFor] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ section: "hero", kind: "Article", title: "", body: "", mediaUrls: "", visibility: "PUBLIC", status: "DRAFT" });
+  const [uploading, setUploading] = useState(false);
 
   const items = useQuery({ queryKey: ["admin-content"], queryFn: () => api.listContent() });
   const sections = useQuery({ queryKey: ["admin-sections"], queryFn: () => api.listLandingSections(), enabled: tab === "Landing builder" });
@@ -47,6 +50,36 @@ export default function ContentPage() {
     },
   });
 
+  const create = useMutation({
+    mutationFn: () =>
+      api.createContent({
+        section: form.section,
+        kind: form.kind,
+        title: form.title,
+        body: form.body,
+        mediaUrls: form.mediaUrls.split(",").map((s) => s.trim()).filter(Boolean),
+        visibility: form.visibility,
+        status: form.status,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-content"] });
+      setShowCreate(false);
+      setForm({ section: "hero", kind: "Article", title: "", body: "", mediaUrls: "", visibility: "PUBLIC", status: "DRAFT" });
+    },
+  });
+
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const out = await api.uploadFile("content", file);
+      const id = (out as { fileId?: string; objectKey?: string }).fileId ?? (out as { objectKey?: string }).objectKey ?? "";
+      setForm((f) => ({ ...f, mediaUrls: f.mediaUrls ? `${f.mediaUrls}, ${id}` : id }));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const shift = (list: { id: string }[], index: number, dir: -1 | 1) => {
     const next = [...list];
     const swap = index + dir;
@@ -64,7 +97,44 @@ export default function ContentPage() {
       </div>
 
       {tab === "Items" ? (
-        <SectionCard title="Content library" intro="Draft, publish, hide, schedule, or archive any item.">
+        <SectionCard title="Content library" intro="Draft, publish, hide, schedule, or archive any item. Create new video/article/hero and choose which public section it goes to.">
+          <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <Button type="button" size="sm" onClick={() => setShowCreate((v) => !v)}>{showCreate ? "Close" : "＋ New content (video / article / news)"}</Button>
+          </div>
+          {showCreate ? (
+            <div style={{ display: "grid", gap: 8, marginBottom: 16, border: "1px solid var(--border)", borderRadius: 8, padding: 12 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <label>Section
+                  <select value={form.section} onChange={(e) => setForm({ ...form, section: e.target.value })}>
+                    {["hero", "message", "about", "vision", "education", "community", "support", "member-library", "document"].map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </label>
+                <label>Kind
+                  <select value={form.kind} onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+                    {["Article", "Video", "Hero", "News", "Document"].map((k) => <option key={k} value={k}>{k}</option>)}
+                  </select>
+                </label>
+                <label>Visibility
+                  <select value={form.visibility} onChange={(e) => setForm({ ...form, visibility: e.target.value })}>
+                    {["PUBLIC", "MEMBER", "TRUSTED"].map((v) => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </label>
+                <label>Status
+                  <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                    {["DRAFT", "PUBLISHED", "HIDDEN", "SCHEDULED"].map((v) => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </label>
+              </div>
+              <input placeholder="Title (required)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+              <textarea placeholder="Body / description / subtitle" value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} rows={3} />
+              <input placeholder="Media URLs or file IDs, comma-separated" value={form.mediaUrls} onChange={(e) => setForm({ ...form, mediaUrls: e.target.value })} />
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <input type="file" accept="image/*,video/mp4,application/pdf" onChange={(e) => upload(e.target.files?.[0])} />
+                <span style={{ fontSize: 12 }}>{uploading ? "Uploading…" : "Upload adds its file ID to Media URLs"}</span>
+              </div>
+              <Button type="button" size="sm" disabled={!form.title || create.isPending} onClick={() => create.mutate()}>{create.isPending ? "Creating…" : "Create + publish to section"}</Button>
+            </div>
+          ) : null}
           <QueryState loading={items.isLoading} error={items.error} empty={!items.data || items.data.length === 0} emptyText="No content items." onRetry={() => items.refetch()}>
             <div className="admin-table-wrap">
               <Table>

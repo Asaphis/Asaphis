@@ -51,23 +51,26 @@ async function main() {
 
   // Preserve old frontend mock content as real DB rows so landing keeps serving
   // after switching to GET /content/published. Admin can edit/publish from /content.
+  // Media preserved from web/frontend/src/lib/mock-data.ts (Pexels/Unsplash).
   const legacyContent = [
-    { section: 'hero', title: 'A serious home for African education and shared progress.', body: 'A home for African education, community knowledge, and the people carrying it forward.', sortOrder: 0 },
-    { section: 'message', title: 'Knowledge is a shared responsibility.', body: 'A message on building trusted knowledge together.', sortOrder: 1 },
-    { section: 'about', title: 'A long-term home for learning and participation.', body: 'AsaPhis makes African education, community knowledge, and thoughtful participation easier to find and carry forward.', sortOrder: 2 },
-    { section: 'vision', title: 'Build the foundation before the horizon.', body: 'See what exists today and what comes next.', sortOrder: 3 },
-    { section: 'education', title: 'How to keep context when a story travels', body: 'A guide to reading historical material with context.', sortOrder: 10 },
-    { section: 'education', title: 'A community note is more than a post', body: 'What makes a community contribution ready to share.', sortOrder: 11 },
-    { section: 'education', title: 'Designing technology for people who need it', body: 'A primer on clear, accountable digital systems.', sortOrder: 12 },
-    { section: 'support', title: 'Support keeps the foundation open.', body: 'Contributions support education, moderation, and secure member access.', sortOrder: 20 },
-    { section: 'community', title: 'Community, with care.', body: 'Read, comment, reply, react, and submit through a visible review process.', sortOrder: 30 },
+    { section: 'hero', kind: 'Hero', title: 'A serious home for African education and shared progress.', body: 'A home for African education, community knowledge, and the people carrying it forward.', mediaUrls: ['https://images.pexels.com/photos/10614241/pexels-photo-10614241.jpeg?auto=compress&cs=tinysrgb&w=1400&q=80'], sortOrder: 0 },
+    { section: 'message', kind: 'Video', title: 'Knowledge is a shared responsibility.', body: 'A message on building trusted knowledge together.', mediaUrls: ['https://videos.pexels.com/video-files/8716787/8716787-uhd_3840_2160_25fps.mp4', 'https://images.pexels.com/videos/8716787/pexels-photo-8716787.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=630&w=1200'], sortOrder: 1 },
+    { section: 'about', kind: 'Article', title: 'A long-term home for learning and participation.', body: 'AsaPhis makes African education, community knowledge, and thoughtful participation easier to find and carry forward.', mediaUrls: ['https://images.unsplash.com/photo-1770910236912-862918eca455?auto=format&fit=crop&w=1100&q=80'], sortOrder: 2 },
+    { section: 'vision', kind: 'Article', title: 'Build the foundation before the horizon.', body: 'See what exists today and what comes next.', mediaUrls: [], sortOrder: 3 },
+    { section: 'education', kind: 'Article', title: 'How to keep context when a story travels', body: 'A guide to reading historical material with context.', mediaUrls: ['https://images.unsplash.com/photo-1764529079425-2ce32cd92b8a?auto=format&fit=crop&w=900&q=80'], sortOrder: 10 },
+    { section: 'education', kind: 'Article', title: 'A community note is more than a post', body: 'What makes a community contribution ready to share.', mediaUrls: ['https://images.unsplash.com/photo-1726207873181-03af2636095d?auto=format&fit=crop&w=700&q=80'], sortOrder: 11 },
+    { section: 'education', kind: 'Article', title: 'Designing technology for people who need it', body: 'A primer on clear, accountable digital systems.', mediaUrls: [], sortOrder: 12 },
+    { section: 'support', kind: 'Article', title: 'Support keeps the foundation open.', body: 'Contributions support education, moderation, and secure member access.', mediaUrls: [], sortOrder: 20 },
+    { section: 'community', kind: 'Article', title: 'Community, with care.', body: 'Read, comment, reply, react, and submit through a visible review process.', mediaUrls: [], sortOrder: 30 },
   ] as const;
   for (const c of legacyContent) {
     const existing = await prisma.contentItem.findFirst({ where: { section: c.section, title: c.title } });
     if (!existing) {
       await prisma.contentItem.create({
-        data: { section: c.section, title: c.title, body: c.body, visibility: 'PUBLIC', status: 'PUBLISHED', sortOrder: c.sortOrder, updatedBy: 'seed' } as never,
+        data: { section: c.section, kind: c.kind, title: c.title, body: c.body, mediaUrls: [...c.mediaUrls], visibility: 'PUBLIC', status: 'PUBLISHED', sortOrder: c.sortOrder, updatedBy: 'seed' } as never,
       });
+    } else if (!((existing as unknown as { mediaUrls?: string[] }).mediaUrls?.length)) {
+      await prisma.contentItem.update({ where: { id: existing.id }, data: { kind: c.kind, mediaUrls: [...c.mediaUrls] } as never });
     }
   }
 

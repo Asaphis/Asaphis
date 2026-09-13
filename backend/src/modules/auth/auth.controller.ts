@@ -1,10 +1,24 @@
 import { Body, Controller, Get, HttpCode, Post, Req, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+import { IsOptional, IsString, MinLength } from 'class-validator';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+
+class ForgotDto {
+  @IsString() email!: string;
+}
+class ResetDto {
+  @IsString() token!: string;
+  @IsString() @MinLength(8) password!: string;
+}
+class ChangeDto {
+  @IsString() currentPassword!: string;
+  @IsString() @MinLength(8) newPassword!: string;
+  @IsOptional() @IsString() logoutOthers?: string;
+}
 
 @ApiTags('auth')
 @Controller('auth')
@@ -61,5 +75,25 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: { sub: string }) {
     return this.auth.me(user.sub);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(200)
+  forgot(@Body() dto: ForgotDto) {
+    return this.auth.requestPasswordReset(dto.email);
+  }
+
+  @Public()
+  @Post('reset-password')
+  @HttpCode(200)
+  reset(@Body() dto: ResetDto) {
+    return this.auth.resetPassword(dto.token, dto.password);
+  }
+
+  @Post('change-password')
+  @HttpCode(200)
+  change(@Body() dto: ChangeDto, @CurrentUser() user: { sub: string }) {
+    return this.auth.changePassword(user.sub, dto.currentPassword, dto.newPassword);
   }
 }

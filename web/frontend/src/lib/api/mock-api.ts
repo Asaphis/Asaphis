@@ -115,5 +115,27 @@ export function createMockApi(seed: DemoData): AsaPhisApi {
         responses: [],
       })
     },
+    async listSupportRequests() {
+      return wait([])
+    },
+    async getPaymentConfig() {
+      return wait([{ countryCode: "GLOBAL", currency: "USD", amount: 25, providers: ["Stripe"], methods: ["Card"] }])
+    },
+    async uploadFile() {
+      return wait({ fileId: "mock-file", fileToken: "mock-file" })
+    },
+    async register(input) {
+      void input
+      return wait({ userId: "mock-user", memberId: seed.member.memberId, stage: "PHONE_VERIFICATION" })
+    },
+    async requestPasswordReset() {
+      return wait({ ok: true })
+    },
+    async resetPassword() {
+      return wait({ ok: true })
+    },
+    async changePassword() {
+      return wait({ ok: true })
+    },
   }
 }

@@ -96,30 +96,48 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       // Role comes from backend JWT - requested role is dev fallback only.
       const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").trim().replace(/\/+$/, "");
       if (base) {
-        try {
-          const res = await fetch(`${base}/api/v1/auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ email: clean, password }),
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { accessToken?: string; token?: string };
-            const token = data.accessToken ?? data.token ?? "";
-            if (token) {
-              try {
-                window.localStorage.setItem("asaphis-admin-token", token);
-              } catch {
-                // ignore
-              }
-            }
-            const name = clean.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-            persist({ name, email: clean, role });
-            return;
+        const res = await fetch(`${base}/api/v1/auth/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email: clean, password }),
+        });
+        if (!res.ok) {
+          let msg = "Invalid admin credentials.";
+          try {
+            const d = (await res.json()) as { message?: string };
+            if (d.message) msg = d.message;
+          } catch {
+            // keep default
           }
-        } catch {
-          // fall through to local session so UI stays usable offline
+          throw new Error(msg);
         }
+        const data = (await res.json()) as { accessToken?: string; token?: string; roles?: string[] };
+        const token = data.accessToken ?? data.token ?? "";
+        if (token) {
+          try {
+            window.localStorage.setItem("asaphis-admin-token", token);
+          } catch {
+            // ignore
+          }
+        }
+        // Derive display role from backend roles when present; never trust
+        // the requested role for authorization — backend RolesGuard decides.
+        const backendRoles = Array.isArray(data.roles) ? data.roles.map((r) => String(r).toUpperCase()) : [];
+        const mapped: AdminRole = backendRoles.includes("SUPER_ADMIN")
+          ? "super"
+          : backendRoles.includes("SECURITY_ADMIN")
+            ? "security"
+            : backendRoles.includes("CONTENT_ADMIN")
+              ? "content"
+              : backendRoles.includes("FINANCE_ADMIN")
+                ? "finance"
+                : backendRoles.includes("MODERATOR")
+                  ? "moderator"
+                  : role;
+        const name = clean.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        persist({ name, email: clean, role: mapped });
+        return;
       }
       await new Promise((resolve) => setTimeout(resolve, 350));
       const name = clean.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -129,17 +147,10 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   );
 
   const switchRole = useCallback(
-    (role: AdminRole) => {
-      setAdmin((current) => {
-        if (!current) return current;
-        const next = { ...current, role };
-        try {
-          window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          // ignore
-        }
-        return next;
-      });
+    (_role: AdminRole) => {
+      // Disabled in production: roles come from backend JWT only.
+      // Kept as no-op so dev UI calling it does not escalate privileges.
+      void _role;
     },
     [],
   );

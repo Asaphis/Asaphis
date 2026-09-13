@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsArray, IsOptional, IsString } from 'class-validator';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -9,7 +9,12 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 class UpsertContentDto {
   @IsString() section!: string;
   @IsString() title!: string;
+  @IsOptional() @IsString() kind?: string;
   @IsOptional() @IsString() body?: string;
+  @IsOptional() @IsArray() mediaUrls?: string[];
+  @IsOptional() @IsString() imageUrl?: string;
+  @IsOptional() @IsString() videoUrl?: string;
+  @IsOptional() @IsString() posterUrl?: string;
   @IsOptional() @IsString() visibility?: string;
   @IsOptional() @IsString() status?: string;
   @IsOptional() sortOrder?: number;
@@ -53,8 +58,14 @@ export class ContentController {
   @Roles('CONTENT_ADMIN', 'SUPER_ADMIN')
   @Post()
   async create(@Body() dto: UpsertContentDto, @CurrentUser() admin: { email: string }) {
+    // mediaUrls is the source of truth; imageUrl/videoUrl/posterUrl are
+    // convenience fields from admin UI merged in order [image, video].
+    const media: string[] = Array.isArray(dto.mediaUrls) ? [...dto.mediaUrls] : [];
+    if (dto.imageUrl && !media.includes(dto.imageUrl)) media.unshift(dto.imageUrl);
+    if (dto.videoUrl && !media.includes(dto.videoUrl)) media.push(dto.videoUrl);
+    if (dto.posterUrl && !media.includes(dto.posterUrl)) media.unshift(dto.posterUrl);
     const row = await this.prisma.contentItem.create({
-      data: { section: dto.section, title: dto.title, body: dto.body ?? '', visibility: (dto.visibility as never) ?? 'PUBLIC', status: (dto.status as never) ?? 'DRAFT', sortOrder: dto.sortOrder ?? 0, updatedBy: admin.email },
+      data: { section: dto.section, kind: dto.kind ?? 'Article', title: dto.title, body: dto.body ?? '', mediaUrls: media, visibility: (dto.visibility?.toUpperCase() as never) ?? 'PUBLIC', status: (dto.status?.toUpperCase() as never) ?? 'DRAFT', sortOrder: dto.sortOrder ?? 0, updatedBy: admin.email },
     });
     await this.prisma.contentVersion.create({ data: { contentId: row.id, version: 1, snapshot: row as never, summary: 'Created', changedBy: admin.email } });
     return row;
@@ -82,5 +93,14 @@ export class ContentController {
   @Get(':id/versions')
   versions(@Param('id') id: string) {
     return this.prisma.contentVersion.findMany({ where: { contentId: id }, orderBy: { version: 'desc' } });
+  }
+
+  @Roles('CONTENT_ADMIN', 'SUPER_ADMIN')
+  @Delete(':id')
+  async remove(@Param('id') id: string, @CurrentUser() admin: { email: string }) {
+    await this.prisma.adminAuditLog.create({ data: { adminEmail: admin.email, action: 'content.delete', target: id } });
+    await this.prisma.contentVersion.deleteMany({ where: { contentId: id } });
+    await this.prisma.contentItem.delete({ where: { id } });
+    return { ok: true };
   }
 }

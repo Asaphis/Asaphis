@@ -133,6 +133,33 @@ export function createAdminApi(context: MockContext = { actor: "A. Admin", role:
     async listContent() {
       return wait([...content].sort((a, b) => a.sortOrder - b.sortOrder));
     },
+    async createContent(input) {
+      const item = {
+        id: `content-${Date.now()}`,
+        section: input.section,
+        kind: input.kind ?? "Article",
+        title: input.title,
+        body: input.body ?? "",
+        mediaUrls: input.mediaUrls ?? [],
+        visibility: (input.visibility ?? "PUBLIC") as never,
+        status: (input.status ?? "draft") as never,
+        sortOrder: input.sortOrder ?? content.length + 1,
+        updatedAt: new Date().toISOString().slice(0, 10),
+        updatedBy: context.actor,
+      } as never;
+      content.push(item as never);
+      log(`Created content ${input.title}`, input.section);
+      return wait({ ...(item as object) } as never);
+    },
+    async uploadFile() {
+      return wait({ fileId: `file-${Date.now()}`, fileToken: `file-${Date.now()}`, objectKey: `content/mock-${Date.now()}` });
+    },
+    async deleteContent(id) {
+      const idx = content.findIndex((c) => c.id === id);
+      if (idx >= 0) content.splice(idx, 1);
+      log(`Deleted content ${id}`, "");
+      return wait({ ok: true });
+    },
     async updateContentStatus(id, status) {
       const item = content.find((c) => c.id === id);
       if (!item) throw new Error("Content not found");

@@ -91,6 +91,9 @@ export interface ContentItem {
   section: string;
   title: string;
   kind: string;
+  body?: string;
+  mediaUrls?: string[];
+  visibility?: string;
   status: ContentStatus;
   updatedAt: string;
   updatedBy: string;

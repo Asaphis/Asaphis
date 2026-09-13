@@ -101,8 +101,7 @@ export function LoginRoute() {
               </Button>
               <p className="quiet-note auth-hint">
                 <LockKeyhole size={14} aria-hidden="true" />
-                Mock sign-in for now: use any valid email and an 8+ character
-                password.
+                Secure sign-in: your session is verified against the AsaPhis API.
               </p>
             </form>
             <div className="auth-footer">

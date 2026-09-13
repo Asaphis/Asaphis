@@ -48,9 +48,22 @@ export class FilesController {
 
   @Get(':id/url')
   async url(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
-    const row = await this.prisma.fileAsset.findFirst({ where: { id, ownerId: user.sub } });
+    const row = await this.prisma.fileAsset.findFirst({ where: { id } });
     if (!row) throw new BadRequestException('Unknown file');
-    // Signed URL minting happens here with S3 SDK in production; V1 returns a short-lived token id.
-    return { url: `/api/v1/files/${row.id}/download?token=${row.id}`, expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), private: row.private };
+    // Private identity docs stay owner/admin-only; public content is open.
+    if (row.private && row.ownerId !== user.sub) throw new BadRequestException('Not authorized');
+    const base = (process.env.S3_PUBLIC_BASE_URL ?? '').replace(/\/+$/, '');
+    const url = base ? `${base}/${row.objectKey}` : `/api/v1/files/${row.id}/download?token=${row.id}`;
+    return { url, expiresAt: new Date(Date.now() + 15 * 60_000).toISOString(), private: row.private };
+  }
+
+  @Get(':id/download')
+  async download(@Param('id') id: string, @CurrentUser() user: { sub: string }) {
+    const row = await this.prisma.fileAsset.findFirst({ where: { id } });
+    if (!row) throw new BadRequestException('Unknown file');
+    if (row.private && row.ownerId !== user.sub) throw new BadRequestException('Not authorized');
+    // Production: stream from S3 with presigned URL (S3_* env). V1 returns
+    // metadata + objectKey so infra/worker can serve it.
+    return { fileId: row.id, objectKey: row.objectKey, mimeType: row.mimeType, sizeBytes: row.sizeBytes, private: row.private };
   }
 }
