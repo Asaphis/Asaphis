@@ -118,11 +118,32 @@ export function createMockApi(seed: DemoData): AsaPhisApi {
     async listSupportRequests() {
       return wait([])
     },
+    async listSubmissions() {
+      return wait([])
+    },
+    async listTravelRequests() {
+      return wait([])
+    },
+    async listDevices() {
+      return wait([])
+    },
+    async listSessions() {
+      return wait([])
+    },
+    async terminateSession() {
+      return wait({ terminated: true })
+    },
+    async revokeDevice() {
+      return wait({ revoked: true })
+    },
     async getPaymentConfig() {
       return wait([{ countryCode: "GLOBAL", currency: "USD", amount: 25, providers: ["Stripe"], methods: ["Card"] }])
     },
     async uploadFile() {
       return wait({ fileId: "mock-file", fileToken: "mock-file" })
+    },
+    async listUpdates() {
+      return wait([])
     },
     async register(input) {
       void input

@@ -47,7 +47,7 @@ export class TravelController {
   @Roles('SECURITY_ADMIN', 'SUPER_ADMIN')
   @Get('admin/requests')
   all() {
-    return this.prisma.travelRequest.findMany({ orderBy: { createdAt: 'desc' }, take: 100, include: { user: { select: { email: true } } } });
+    return this.prisma.travelRequest.findMany({ orderBy: { createdAt: 'desc' }, take: 100, include: { user: { select: { email: true, member: { select: { displayName: true, memberCode: true } } } } } });
   }
 
   @Roles('SECURITY_ADMIN', 'SUPER_ADMIN')

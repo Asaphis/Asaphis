@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { createApi } from "@/lib/api/api-factory";
-import { demoData } from "@/lib/mock-data";
+import { queryClient } from "@/lib/query-client";
 
 export interface AuthSession {
   token: string;
@@ -118,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       persist({
         token: `pending-signup-${Date.now()}`,
         email: fallbackEmail,
-        memberId: demoData.member.memberId,
+        memberId: "",
       });
     },
     [persist],
@@ -135,6 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.logout();
     } finally {
       persist(null);
+      // Drop every cached member row so the next login starts clean.
+      queryClient.clear();
     }
   }, [persist]);
 

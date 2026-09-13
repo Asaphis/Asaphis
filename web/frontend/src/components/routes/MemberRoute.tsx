@@ -4,7 +4,6 @@ import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { MemberPlatform } from "@/components/member/MemberPlatform";
 import { createApi } from "@/lib/api/api-factory";
-import { demoData } from "@/lib/mock-data";
 import { useAuth } from "@/lib/auth/auth-context";
 
 export function MemberRoute() {
@@ -37,7 +36,6 @@ export function MemberRoute() {
       <main id="app-main" className="app-main">
         <MemberPlatform
           api={api}
-          data={demoData}
           onPublic={() => router.push("/")}
           onLogout={async () => {
             await logout();

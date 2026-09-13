@@ -29,7 +29,16 @@ export interface AdminDashboardApi {
   getDashboardStats(): Promise<DashboardStats>;
 }
 
+export interface AdminDirectoryEntry {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  lastActive: string;
+}
+
 export interface AdminMembersApi {
+  listAdmins(): Promise<AdminDirectoryEntry[]>;
   listMembers(query?: {
     search?: string;
     country?: string;
@@ -192,6 +201,13 @@ export interface AdminAnalyticsApi {
   getAnalytics(): Promise<AnalyticsSummary>;
 }
 
+export interface AdminSettingsApi {
+  listFeatureFlags(): Promise<{ key: string; enabled: boolean }[]>;
+  setFeatureFlag(key: string, enabled: boolean): Promise<{ key: string; enabled: boolean }>;
+  getAppSettings(): Promise<Record<string, unknown>>;
+  setAppSetting(key: string, value: unknown): Promise<void>;
+}
+
 export type AdminApi = AdminDashboardApi &
   AdminMembersApi &
   AdminIdentityApi &
@@ -204,6 +220,7 @@ export type AdminApi = AdminDashboardApi &
   AdminSecurityApi &
   AdminCommunityApi &
   AdminSupportApi &
-  AdminAnalyticsApi;
+  AdminAnalyticsApi &
+  AdminSettingsApi;
 
 export type { SubmissionStatus, VerificationStatus };

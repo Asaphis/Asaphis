@@ -110,6 +110,9 @@ export function createAdminApi(context: MockContext = { actor: "A. Admin", role:
       if (!found) throw new Error("Member not found");
       return wait(found);
     },
+    async listAdmins() {
+      return wait([]);
+    },
 
     async listIdentityCases(status) {
       return wait(!status || status === "All" ? identity : identity.filter((c) => c.status === status));
@@ -357,6 +360,18 @@ export function createAdminApi(context: MockContext = { actor: "A. Admin", role:
     },
     async listAuditEvents() {
       return wait([...audit]);
+    },
+    async listFeatureFlags() {
+      return wait([]);
+    },
+    async setFeatureFlag(key, enabled) {
+      return wait({ key, enabled });
+    },
+    async getAppSettings() {
+      return wait({});
+    },
+    async setAppSetting() {
+      return wait(undefined);
     },
 
     async getCommunitySettings() {

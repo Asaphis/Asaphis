@@ -41,6 +41,10 @@ export class RestrictionsController {
   @Roles('MODERATOR', 'SECURITY_ADMIN', 'SUPER_ADMIN')
   @Get()
   list() {
-    return this.prisma.restriction.findMany({ orderBy: { appliedAt: 'desc' }, take: 100 });
+    return this.prisma.restriction.findMany({
+      orderBy: { appliedAt: 'desc' },
+      take: 100,
+      include: { user: { select: { email: true, member: { select: { displayName: true, memberCode: true } } } } },
+    });
   }
 }

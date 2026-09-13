@@ -14,7 +14,6 @@ import {
   Heart,
   Home,
   LifeBuoy,
-  LockKeyhole,
   LogOut,
   Menu,
   MessageCircle,
@@ -61,11 +60,11 @@ import { StateStrip } from "@/components/shared/StateStrip";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import type { AsaPhisApi } from "@/lib/api/contracts";
 import type {
-  DemoData,
   MemberPanel,
+  MemberProfile,
   NotificationCategory,
-  PaymentStatus,
   SupportCategory,
+  UpdateEntry,
 } from "@/lib/types";
 import { formatDate, formatContribution, memberPanelLabels } from "@/lib/types";
 import { useQuery } from "@tanstack/react-query";
@@ -100,12 +99,10 @@ const navGroups: {
 
 export function MemberPlatform({
   api,
-  data,
   onPublic,
   onLogout,
 }: {
   api: AsaPhisApi;
-  data: DemoData;
   onPublic: () => void;
   onLogout: () => void;
 }) {
@@ -116,7 +113,25 @@ export function MemberPlatform({
     queryKey: ["member-profile"],
     queryFn: api.getMemberProfile,
   });
-  const profile = profileQuery.data ?? data.member;
+  // Real authenticated member only — never demo data. Null while loading.
+  const profile = profileQuery.data ?? null;
+  const publishedQuery = useQuery({
+    queryKey: ["published-content"],
+    queryFn: api.getPublishedLandingContent,
+  });
+  const resourcesQuery = useQuery({
+    queryKey: ["education", "All", ""],
+    queryFn: () => api.getEducation({}),
+  });
+  const notificationsQuery = useQuery({
+    queryKey: ["notifications", "All"],
+    queryFn: () => api.getNotifications(),
+  });
+  const unreadCount = (notificationsQuery.data ?? []).filter((n) => !n.read).length;
+  const updatesQuery = useQuery({
+    queryKey: ["member-updates"],
+    queryFn: api.listUpdates,
+  });
 
   const navigate = (nextPanel: MemberPanel) => {
     setPanel(nextPanel);
@@ -169,8 +184,8 @@ export function MemberPlatform({
                   >
                     <Icon size={16} aria-hidden="true" />
                     <span>{memberPanelLabels[key]}</span>
-                    {key === "notifications" ? (
-                      <span className="nav-count">2</span>
+                    {key === "notifications" && unreadCount > 0 ? (
+                      <span className="nav-count">{unreadCount}</span>
                     ) : null}
                   </button>
                 ))}
@@ -180,11 +195,11 @@ export function MemberPlatform({
           <div className="member-sidebar-footer">
             <div className="sidebar-member">
               <Avatar>
-                <AvatarFallback>{profile.initials}</AvatarFallback>
+                <AvatarFallback>{profile?.initials ?? "…"}</AvatarFallback>
               </Avatar>
               <div>
-                <strong>{profile.name}</strong>
-                <span>{profile.memberId}</span>
+                <strong>{profile?.name ?? "Loading…"}</strong>
+                <span>{profile?.memberId ?? "…"}</span>
               </div>
             </div>
             <Button
@@ -247,7 +262,7 @@ export function MemberPlatform({
                 aria-label="Open profile"
               >
                 <Avatar className="header-avatar">
-                  <AvatarFallback>{profile.initials}</AvatarFallback>
+                  <AvatarFallback>{profile?.initials ?? "…"}</AvatarFallback>
                 </Avatar>
               </button>
               <Button
@@ -264,12 +279,33 @@ export function MemberPlatform({
             </div>
           </header>
           <main className="member-main" aria-live="polite">
-            <MemberPanel
-              panel={panel}
-              api={api}
-              data={data}
-              navigate={navigate}
-            />
+            {profileQuery.isError ? (
+              <StateStrip
+                state="error"
+                message="We could not load your member record. Your session may have expired — please log in again."
+                onRetry={() => profileQuery.refetch()}
+              />
+            ) : (
+              <MemberPanel
+                panel={panel}
+                api={api}
+                profile={profile}
+                published={publishedQuery.data ?? null}
+                resourceCount={(resourcesQuery.data ?? []).length}
+                updates={updatesQuery.data ?? []}
+                updatesState={
+                  updatesQuery.isLoading
+                    ? ("loading" as const)
+                    : updatesQuery.isError
+                      ? ("error" as const)
+                      : (updatesQuery.data ?? []).length === 0
+                        ? ("empty" as const)
+                        : ("success" as const)
+                }
+                onUpdatesRetry={() => updatesQuery.refetch()}
+                navigate={navigate}
+              />
+            )}
           </main>
           <nav
             className="mobile-bottom-nav"
@@ -393,39 +429,57 @@ export function MemberPlatform({
 function MemberPanel({
   panel,
   api,
-  data,
+  profile,
+  published,
+  resourceCount,
+  updates,
+  updatesState,
+  onUpdatesRetry,
   navigate,
 }: {
   panel: MemberPanel;
   api: AsaPhisApi;
-  data: DemoData;
+  profile: MemberProfile | null;
+  published: import("@/lib/types").PublicContent | null;
+  resourceCount: number;
+  updates: UpdateEntry[];
+  updatesState: "loading" | "error" | "empty" | "success";
+  onUpdatesRetry: () => void;
   navigate: (panel: MemberPanel) => void;
 }) {
   switch (panel) {
     case "home":
-      return <HomePanel data={data} navigate={navigate} />;
+      return (
+        <HomePanel
+          profile={profile}
+          featured={published?.featuredMessage ?? null}
+          resourceCount={resourceCount}
+          latestUpdate={updates[0] ?? null}
+          navigate={navigate}
+        />
+      );
     case "education":
-      return <EducationPanel api={api} data={data} />;
+      return <EducationPanel api={api} />;
     case "videos":
-      return <VideosPanel api={api} data={data} />;
+      return <VideosPanel api={api} />;
     case "documents":
-      return <DocumentsPanel api={api} data={data} />;
+      return <DocumentsPanel api={api} />;
     case "updates":
-      return <UpdatesPanel />;
+      return <UpdatesPanel updates={updates} state={updatesState} onRetry={onUpdatesRetry} />;
     case "community":
-      return <CommunityPanel api={api} data={data} />;
+      return <CommunityPanel api={api} profile={profile} />;
     case "contribute":
-      return <ContributePanel data={data} />;
+      return <ContributePanel api={api} />;
     case "notifications":
-      return <NotificationsPanel api={api} data={data} />;
+      return <NotificationsPanel api={api} />;
     case "profile":
-      return <ProfilePanel data={data} navigate={navigate} />;
+      return <ProfilePanel profile={profile} navigate={navigate} />;
     case "security":
-      return <SecurityPanel navigate={navigate} />;
+      return <SecurityPanel api={api} profile={profile} navigate={navigate} />;
     case "travel":
-      return <TravelPanel api={api} data={data} />;
+      return <TravelPanel api={api} />;
     case "support":
-      return <SupportPanel api={api} data={data} />;
+      return <SupportPanel api={api} />;
   }
 }
 
@@ -451,86 +505,99 @@ function PanelHeader({
 }
 
 function HomePanel({
-  data,
+  profile,
+  featured,
+  resourceCount,
+  latestUpdate,
   navigate,
 }: {
-  data: DemoData;
+  profile: MemberProfile | null;
+  featured: import("@/lib/types").FeaturedMessage | null;
+  resourceCount: number;
+  latestUpdate: UpdateEntry | null;
   navigate: (panel: MemberPanel) => void;
 }) {
-  const firstName = data.member.name.trim().split(" ")[0] || "there";
+  const firstName = (profile?.name ?? "").trim().split(" ")[0] || "there";
   return (
     <div>
       <PanelHeader
         eyebrow="Your workspace"
         title={`Good morning, ${firstName}.`}
         description="A focused place for learning, updates, careful participation, and account support."
-        action={<StatusBadge status="Active" />}
+        action={<StatusBadge status={profile ? (profile.accountStatus === "active" ? "Active" : "Limited") : "Loading"} />}
       />
       <div className="home-grid">
-        <Card className="home-feature">
-          <div className="home-feature-media">
-            <img
-              src={data.publicContent.featuredMessage.posterUrl}
-              alt={data.publicContent.featuredMessage.posterAlt}
-            />
-            <span className="media-play">
-              <Play size={17} fill="currentColor" aria-hidden="true" />
+        {featured ? (
+          <Card className="home-feature">
+            <div className="home-feature-media">
+              <img
+                src={featured.posterUrl}
+                alt={featured.posterAlt}
+              />
+              <span className="media-play">
+                <Play size={17} fill="currentColor" aria-hidden="true" />
+              </span>
+            </div>
+            <div className="home-feature-copy">
+              <p className="eyebrow">Featured message</p>
+              <h3>{featured.title}</h3>
+              <p>{featured.description}</p>
+              <Button
+                type="button"
+                variant="link"
+                className="ap-link-button"
+                onClick={() => navigate("videos")}
+              >
+                Watch message <ArrowRight size={14} aria-hidden="true" />
+              </Button>
+            </div>
+          </Card>
+        ) : null}
+        <Card className="welcome-card">
+          <p className="eyebrow">Member since</p>
+          <strong>{profile ? formatDate(profile.joinedAt) : "…"}</strong>
+          <p>Member ID · {profile?.memberId || "…"}</p>
+          <Separator />
+          <div className="verification-summary">
+            <span>
+              <Check size={14} aria-hidden="true" />{" "}
+              {profile ? (profile.identityVerified ? "Identity verified" : "Identity pending") : "…"}
+            </span>
+            <span>
+              <Check size={14} aria-hidden="true" />{" "}
+              {profile ? (profile.phoneVerified ? "Phone verified" : "Phone pending") : "…"}
             </span>
           </div>
-          <div className="home-feature-copy">
-            <p className="eyebrow">Featured message</p>
-            <h3>{data.publicContent.featuredMessage.title}</h3>
-            <p>{data.publicContent.featuredMessage.description}</p>
+        </Card>
+        {latestUpdate ? (
+          <Card className="latest-update">
+            <div className="card-header-row">
+              <div>
+                <p className="eyebrow">Latest update</p>
+                <h3>{latestUpdate.title}</h3>
+              </div>
+              <StatusBadge status="Published" />
+            </div>
+            <p>{latestUpdate.body}</p>
             <Button
               type="button"
               variant="link"
               className="ap-link-button"
-              onClick={() => navigate("videos")}
+              onClick={() => navigate("updates")}
             >
-              Watch message <ArrowRight size={14} aria-hidden="true" />
+              Read the Journal <ArrowRight size={14} aria-hidden="true" />
             </Button>
-          </div>
-        </Card>
-        <Card className="welcome-card">
-          <p className="eyebrow">Member since</p>
-          <strong>September 2026</strong>
-          <p>Member ID · {data.member.memberId}</p>
-          <Separator />
-          <div className="verification-summary">
-            <span>
-              <Check size={14} aria-hidden="true" /> Identity verified
-            </span>
-            <span>
-              <Check size={14} aria-hidden="true" /> Phone verified
-            </span>
-          </div>
-        </Card>
-        <Card className="latest-update">
-          <div className="card-header-row">
-            <div>
-              <p className="eyebrow">Latest update</p>
-              <h3>Building a platform that stays useful.</h3>
-            </div>
-            <StatusBadge status="Published" />
-          </div>
-          <p>
-            Our September journal is available with notes on the education
-            library, moderation practice, and what we are learning from members.
-          </p>
-          <Button
-            type="button"
-            variant="link"
-            className="ap-link-button"
-            onClick={() => navigate("updates")}
-          >
-            Read the Journal <ArrowRight size={14} aria-hidden="true" />
-          </Button>
-        </Card>
+          </Card>
+        ) : null}
         <div className="quick-links">
           <QuickLink
             icon={BookOpen}
             title="Education"
-            body={`Browse ${data.resources.length} member resources.`}
+            body={
+              resourceCount > 0
+                ? `Browse ${resourceCount} member resources.`
+                : "Education resources will appear here."
+            }
             onClick={() => navigate("education")}
           />
           <QuickLink
@@ -582,14 +649,14 @@ function QuickLink({
   );
 }
 
-function EducationPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
+function EducationPanel({ api }: { api: AsaPhisApi }) {
   const [category, setCategory] = useState("All");
   const [search, setSearch] = useState("");
   const query = useQuery({
     queryKey: ["education", category, search],
     queryFn: () => api.getEducation({ category, search }),
   });
-  const resources = query.data ?? data.resources;
+  const resources = query.data ?? [];
   const shownResources = resources;
   const collectionState = query.isLoading
     ? ("loading" as const)
@@ -688,14 +755,13 @@ function EducationPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
   );
 }
 
-function VideosPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
+function VideosPanel({ api }: { api: AsaPhisApi }) {
   const videosQuery = useQuery({
     queryKey: ["videos"],
     queryFn: api.getVideos,
   });
-  const videos =
-    videosQuery.data ??
-    data.resources.filter((resource) => resource.kind === "Video");
+  const videos = videosQuery.data ?? [];
+  const featured = videos[0] ?? null;
   const videosState = videosQuery.isLoading
     ? ("loading" as const)
     : videosQuery.isError
@@ -728,30 +794,32 @@ function VideosPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
         }
         onRetry={() => videosQuery.refetch()}
       />
-      <Card className="video-feature-card">
-        <div className="video-feature-image">
-          <img
-            src={data.publicContent.featuredMessage.posterUrl}
-            alt={data.publicContent.featuredMessage.posterAlt}
-          />
-          <span className="media-play">
-            <Play size={19} fill="currentColor" aria-hidden="true" />
-          </span>
-        </div>
-        <div className="video-feature-copy">
-          <p className="eyebrow">Featured video</p>
-          <h3>{data.publicContent.featuredMessage.title}</h3>
-          <p>{data.publicContent.featuredMessage.description}</p>
-          <div className="resource-meta">
-            <span>
-              {formatDate(data.publicContent.featuredMessage.publishedAt)}
-            </span>
-            <span>
-              {data.publicContent.featuredMessage.durationMinutes} min watch
+      {featured ? (
+        <Card className="video-feature-card">
+          <div className="video-feature-image">
+            {featured.imageUrl ? (
+              <img
+                src={featured.imageUrl}
+                alt={featured.imageAlt}
+              />
+            ) : null}
+            <span className="media-play">
+              <Play size={19} fill="currentColor" aria-hidden="true" />
             </span>
           </div>
-        </div>
-      </Card>
+          <div className="video-feature-copy">
+            <p className="eyebrow">Featured video</p>
+            <h3>{featured.title}</h3>
+            <p>{featured.description}</p>
+            <div className="resource-meta">
+              <span>{formatDate(featured.publishedAt)}</span>
+              {featured.durationMinutes ? (
+                <span>{featured.durationMinutes} min watch</span>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+      ) : null}
       <div className="section-subhead">
         <div>
           <p className="eyebrow">Latest videos</p>
@@ -787,21 +855,18 @@ function VideosPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
           </Card>
         ))}
       </div>
-      <div className="history-row">
-        <div>
-          <p className="eyebrow">Watch history</p>
-          <strong>
-            History is optional and not an exact measure of attention.
-          </strong>
-        </div>
-        <span>Last watched · 4 min</span>
-      </div>
     </div>
   );
 }
 
-function DocumentsPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
+function DocumentsPanel({ api }: { api: AsaPhisApi }) {
   const [feedback, setFeedback] = useState("");
+  const [error, setError] = useState("");
+  const docsQuery = useQuery({
+    queryKey: ["member-documents"],
+    queryFn: api.getDocuments,
+  });
+  const documents = docsQuery.data ?? [];
   return (
     <div>
       <PanelHeader
@@ -810,7 +875,15 @@ function DocumentsPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
         description="Downloads use a short-lived file link. Private storage URLs are never exposed here."
         action={<StatusBadge status="Verified" />}
       />
-      {data.documents.length === 0 ? (
+      {docsQuery.isLoading ? (
+        <StateStrip state="loading" message="Requesting your documents…" />
+      ) : docsQuery.isError ? (
+        <StateStrip
+          state="error"
+          message="Your documents could not be loaded. Please try again."
+          onRetry={() => docsQuery.refetch()}
+        />
+      ) : documents.length === 0 ? (
         <StateStrip
           state="empty"
           message="No authorized documents returned for this member."
@@ -828,7 +901,7 @@ function DocumentsPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.documents.map((document) => (
+              {documents.map((document) => (
                 <TableRow key={document.id}>
                   <TableCell>
                     <div className="table-title">
@@ -850,12 +923,17 @@ function DocumentsPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
                         size="sm"
                         className="ap-control ap-control-outline"
                         onClick={async () => {
-                          const result = await api.requestDocumentDownload(
-                            document.id,
-                          );
-                          setFeedback(
-                            `Authorized: ${document.title}. Access link expires ${new Date(result.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`,
-                          );
+                          setError("");
+                          try {
+                            const result = await api.requestDocumentDownload(
+                              document.id,
+                            );
+                            setFeedback(
+                              `Authorized: ${document.title}. Access link expires ${new Date(result.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`,
+                            );
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : "Download is not available right now.");
+                          }
                         }}
                       >
                         <ArrowDownToLine size={14} aria-hidden="true" />{" "}
@@ -872,28 +950,20 @@ function DocumentsPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
         </div>
       )}
       {feedback ? <StateStrip state="success" message={feedback} /> : null}
+      {error ? <StateStrip state="error" message={error} /> : null}
     </div>
   );
 }
 
-function UpdatesPanel() {
-  const updates = [
-    {
-      month: "September 2026",
-      title: "What we are learning from the first member cohort",
-      body: "An update on education collections, moderation practice, and the questions worth carrying forward.",
-    },
-    {
-      month: "August 2026",
-      title: "A clearer path from note to contribution",
-      body: "We introduced a more visible submission status flow so members always know what happens next.",
-    },
-    {
-      month: "July 2026",
-      title: "Beginning with public education",
-      body: "The first public previews make a small part of the learning library available before membership.",
-    },
-  ];
+function UpdatesPanel({
+  updates,
+  state,
+  onRetry,
+}: {
+  updates: UpdateEntry[];
+  state: "loading" | "error" | "empty" | "success";
+  onRetry: () => void;
+}) {
   return (
     <div>
       <PanelHeader
@@ -902,48 +972,74 @@ function UpdatesPanel() {
         description="Chronological history stays available according to its visibility policy. New entries do not make older entries disappear."
         action={<StatusBadge status="Published" />}
       />
-      <div className="journal-list">
-        {updates.map((update, index) => (
-          <article className="journal-entry" key={update.month}>
-            <div className="journal-marker">
-              <span>{String(index + 1).padStart(2, "0")}</span>
-            </div>
-            <div>
-              <p className="eyebrow">{update.month}</p>
-              <h3>{update.title}</h3>
-              <p>{update.body}</p>
-              <Button type="button" variant="link" className="ap-link-button">
-                Read journal entry <ArrowRight size={14} aria-hidden="true" />
-              </Button>
-            </div>
-          </article>
-        ))}
-      </div>
+      {state === "loading" ? (
+        <StateStrip state="loading" message="Requesting published updates…" />
+      ) : state === "error" ? (
+        <StateStrip
+          state="error"
+          message="Updates could not be loaded. Please try again."
+          onRetry={onRetry}
+        />
+      ) : state === "empty" ? (
+        <StateStrip state="empty" message="No updates published yet. Check back soon." />
+      ) : (
+        <div className="journal-list">
+          {updates.map((update, index) => (
+            <article className="journal-entry" key={update.id}>
+              <div className="journal-marker">
+                <span>{String(index + 1).padStart(2, "0")}</span>
+              </div>
+              <div>
+                <p className="eyebrow">{formatDate(update.date)}</p>
+                <h3>{update.title}</h3>
+                <p>{update.body}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function CommunityPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
-  const [liked, setLiked] = useState(false);
-  const [comment, setComment] = useState("");
-  const [submissionStatus, setSubmissionStatus] = useState(
-    data.submissions[0].status,
-  );
+function CommunityPanel({ api, profile }: { api: AsaPhisApi; profile: MemberProfile | null }) {
+  const [submissionTitle, setSubmissionTitle] = useState("");
+  const [submissionBody, setSubmissionBody] = useState("");
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
-  const [submissionTitle, setSubmissionTitle] = useState(
-    "A note on neighborhood learning circles",
-  );
-  const [submissionBody, setSubmissionBody] = useState(
-    "A draft contribution about how informal study groups share resources and keep learning visible.",
-  );
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submissionsQuery = useQuery({
+    queryKey: ["member-submissions"],
+    queryFn: api.listSubmissions,
+  });
+  const submissions = submissionsQuery.data ?? [];
+  const selected = submissions.find((s) => s.id === activeId) ?? submissions[0] ?? null;
+  const submissionStatus = selected?.status ?? "Draft";
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const result = await api.submitCommunityContribution({
-      title: submissionTitle,
-      body: submissionBody,
-    });
-    setSubmissionStatus(result.status);
-    setFeedback("Submission moved to Under Review.");
+    setFeedback("");
+    setError("");
+    if (!submissionTitle.trim() || !submissionBody.trim()) {
+      setError("Give your contribution a title and body before submitting.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.submitCommunityContribution({
+        title: submissionTitle.trim(),
+        body: submissionBody.trim(),
+      });
+      setActiveId(result.id);
+      setSubmissionTitle("");
+      setSubmissionBody("");
+      setFeedback(`Submitted for review · status ${result.status}.`);
+      await submissionsQuery.refetch();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Your contribution could not be submitted.");
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <div>
@@ -958,97 +1054,47 @@ function CommunityPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
           <Card className="thread-card">
             <div className="thread-author">
               <Avatar>
-                <AvatarFallback>AP</AvatarFallback>
+                <AvatarFallback>{profile?.initials ?? "…"}</AvatarFallback>
               </Avatar>
               <div>
-                <strong>AsaPhis Editorial</strong>
-                <span>Admin post · 08 Sep 2026</span>
+                <strong>{profile?.name ?? "Loading…"}</strong>
+                <span>My submissions · newest first</span>
               </div>
-              <MoreHorizontal
-                size={17}
-                aria-hidden="true"
-                className="thread-more"
+            </div>
+            {submissionsQuery.isLoading ? (
+              <StateStrip state="loading" message="Requesting your submissions…" />
+            ) : submissionsQuery.isError ? (
+              <StateStrip
+                state="error"
+                message="Your submissions could not be loaded."
+                onRetry={() => submissionsQuery.refetch()}
               />
-            </div>
-            <h3>What should a useful community archive make easier?</h3>
-            <p>
-              We are collecting examples of learning that already happens in
-              communities. Keep your contribution specific, sourced, and open to
-              revision.
-            </p>
-            <div className="thread-actions">
-              <button
-                type="button"
-                onClick={() => setLiked(!liked)}
-                className={liked ? "is-liked" : ""}
-              >
-                <Heart
-                  size={15}
-                  fill={liked ? "currentColor" : "none"}
-                  aria-hidden="true"
-                />{" "}
-                {liked ? 9 : 8}
-              </button>
-              <span>
-                <MessageCircle size={15} aria-hidden="true" /> 3 replies
-              </span>
-            </div>
-            <Separator />
-            <div className="reply">
-              <Avatar>
-                <AvatarFallback>{data.member.initials}</AvatarFallback>
-              </Avatar>
-              <div>
-                <strong>{data.member.name}</strong>
-                <p>
-                  I would like to see more context around who collected the
-                  original notes.
-                </p>
-                <span>Reply · Use a source when you can</span>
-              </div>
-            </div>
-            <div className="reply reply-nested">
-              <Avatar>
-                <AvatarFallback>ED</AvatarFallback>
-              </Avatar>
-              <div>
-                <strong>AsaPhis Editorial</strong>
-                <p>
-                  That is exactly the kind of question the new source field is
-                  for.
-                </p>
-                <span>Admin reply · 08 Sep</span>
-              </div>
-            </div>
-            <form
-              className="comment-form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setFeedback(
-                  comment.trim()
-                    ? "Comment saved for moderation."
-                    : "Write a comment before sending.",
-                );
-                if (comment.trim()) setComment("");
-              }}
-            >
-              <Input
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                placeholder="Add a thoughtful comment"
-                aria-label="Add a comment"
+            ) : submissions.length === 0 ? (
+              <StateStrip
+                state="empty"
+                message="No submissions yet. Use the form to send your first contribution for review."
               />
-              <Button
-                type="submit"
-                className="ap-control ap-control-dark"
-                size="icon"
-                aria-label="Send comment"
-              >
-                <Send size={15} />
-              </Button>
-            </form>
+            ) : (
+              <div className="submission-list">
+                {submissions.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={selected?.id === item.id ? "is-current" : ""}
+                    onClick={() => setActiveId(item.id)}
+                  >
+                    <span>
+                      <strong>{item.title}</strong>
+                      <small>{formatDate(item.updatedAt)}</small>
+                    </span>
+                    <StatusBadge status={item.status} />
+                  </button>
+                ))}
+              </div>
+            )}
           </Card>
           {feedback ? <StateStrip state="success" message={feedback} /> : null}
+          {error ? <StateStrip state="error" message={error} /> : null}
         </div>
         <Card className="submission-card">
           <div className="card-header-row">
@@ -1085,7 +1131,7 @@ function CommunityPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
               <AlertTriangle size={16} aria-hidden="true" />
               <AlertTitle>Changes requested</AlertTitle>
               <AlertDescription>
-                {data.submissions[0].adminMessage}
+                {selected?.adminMessage ?? "A moderator left feedback on this submission."}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -1109,19 +1155,12 @@ function CommunityPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
             </div>
             <div className="submission-actions">
               <Button
-                type="button"
-                variant="outline"
-                className="ap-control ap-control-outline"
-                onClick={() =>
-                  setFeedback(
-                    "Source attachment slot opened. Production uploads use an authorized endpoint.",
-                  )
-                }
+                type="submit"
+                className="ap-control ap-control-primary"
+                disabled={busy}
               >
-                <FileText size={15} aria-hidden="true" /> Add source
-              </Button>
-              <Button type="submit" className="ap-control ap-control-primary">
-                Submit for review <ArrowRight size={15} aria-hidden="true" />
+                {busy ? "Submitting…" : "Submit for review"}{" "}
+                <ArrowRight size={15} aria-hidden="true" />
               </Button>
             </div>
           </form>
@@ -1131,57 +1170,87 @@ function CommunityPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
   );
 }
 
-function ContributePanel({ data }: { data: DemoData }) {
-  const [status, setStatus] = useState<PaymentStatus>("Successful");
+function ContributePanel({ api }: { api: AsaPhisApi }) {
+  const [method, setMethod] = useState("Card");
+  const [result, setResult] = useState<{ id: string; status: string } | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const configQuery = useQuery({
+    queryKey: ["payment-config"],
+    queryFn: api.getPaymentConfig,
+  });
+  const config = (configQuery.data ?? [])[0] ?? null;
+  const contribute = async () => {
+    if (!config) return;
+    setError("");
+    setBusy(true);
+    try {
+      const created = await api.createContribution({
+        amount: config.amount,
+        currency: config.currency,
+        method: method as never,
+      });
+      setResult({ id: created.id, status: created.status });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Your contribution could not be started.");
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div>
       <PanelHeader
         eyebrow="Contribution history"
         title="Contribute"
         description="Contribution methods are selected by region. Membership becomes active after confirmation."
-        action={<StatusBadge status={status} />}
+        action={<StatusBadge status={result?.status ?? "Pending"} />}
       />
       <div className="contribute-grid">
         <Card className="contribution-status-card">
           <p className="eyebrow">Current membership contribution</p>
-          <strong>
-            {formatContribution(
-              data.publicContent.support.amount,
-              data.publicContent.support.currency,
-            )}
-          </strong>
-          <p>Recorded 08 Sep 2026 · Card ending in •• 4242</p>
-          <div className="payment-status-list">
-            {(
-              [
-                "Pending",
-                "Processing",
-                "Successful",
-                "Failed",
-                "Cancelled",
-              ] as PaymentStatus[]
-            ).map((item) => (
-              <button
-                key={item}
+          {configQuery.isLoading ? (
+            <StateStrip state="loading" message="Requesting contribution details…" />
+          ) : configQuery.isError || !config ? (
+            <StateStrip
+              state="error"
+              message="Contribution details are unavailable right now."
+              onRetry={() => configQuery.refetch()}
+            />
+          ) : (
+            <>
+              <strong>{formatContribution(config.amount, config.currency)}</strong>
+              <p>
+                {config.methods.length > 0 ? `Methods: ${config.methods.join(" · ")}` : "Contact support for payment methods."}
+              </p>
+              <div className="form-field">
+                <Label htmlFor="contribute-method">Method</Label>
+                <Select value={method} onValueChange={setMethod}>
+                  <SelectTrigger id="contribute-method" className="full-input">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(config.methods.length > 0 ? config.methods : ["Card"]).map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {item}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
                 type="button"
-                onClick={() => setStatus(item)}
-                className={status === item ? "is-active" : ""}
+                className="ap-control ap-control-primary"
+                disabled={busy}
+                onClick={contribute}
               >
-                <StatusBadge status={item} />
-                <span>
-                  {item === "Successful"
-                    ? "Membership active"
-                    : item === "Failed"
-                      ? "Retry available"
-                      : item === "Pending"
-                        ? "Awaiting confirmation"
-                        : item === "Processing"
-                          ? "Processing payment"
-                          : "Cancelled"}
-                </span>
-              </button>
-            ))}
-          </div>
+                {busy ? "Starting…" : "Start contribution"}
+              </Button>
+            </>
+          )}
+          {result ? (
+            <StateStrip state="success" message={`Contribution ${result.id} · status ${result.status}.`} />
+          ) : null}
+          {error ? <StateStrip state="error" message={error} /> : null}
         </Card>
         <Card className="contribution-why-card">
           <p className="eyebrow">Why it matters</p>
@@ -1204,20 +1273,15 @@ function ContributePanel({ data }: { data: DemoData }) {
   );
 }
 
-function NotificationsPanel({
-  api,
-  data,
-}: {
-  api: AsaPhisApi;
-  data: DemoData;
-}) {
+function NotificationsPanel({ api }: { api: AsaPhisApi }) {
   const [category, setCategory] = useState<NotificationCategory | "All">("All");
   const query = useQuery({
     queryKey: ["notifications", category],
     queryFn: () =>
       api.getNotifications(category === "All" ? undefined : category),
   });
-  const notifications = query.data ?? data.notifications;
+  const notifications = query.data ?? [];
+  const unread = notifications.filter((n) => !n.read).length;
   const categories: (NotificationCategory | "All")[] = [
     "All",
     "Updates",
@@ -1237,7 +1301,7 @@ function NotificationsPanel({
         description="Keep updates, education, moderation, security, travel, account, and support history in one place."
         action={
           <Badge className="rounded-full bg-[#d47b35] text-[#232d23]">
-            2 unread
+            {query.isLoading ? "…" : `${unread} unread`}
           </Badge>
         }
       />
@@ -1257,6 +1321,17 @@ function NotificationsPanel({
           </button>
         ))}
       </div>
+      {query.isLoading ? (
+        <StateStrip state="loading" message="Requesting your notifications…" />
+      ) : query.isError ? (
+        <StateStrip
+          state="error"
+          message="Notifications could not be loaded. Please try again."
+          onRetry={() => query.refetch()}
+        />
+      ) : notifications.length === 0 ? (
+        <StateStrip state="empty" message="You are all caught up. New account activity will appear here." />
+      ) : null}
       <div className="notification-list">
         {notifications.map((notification) => (
           <article
@@ -1281,10 +1356,10 @@ function NotificationsPanel({
 }
 
 function ProfilePanel({
-  data,
+  profile,
   navigate,
 }: {
-  data: DemoData;
+  profile: MemberProfile | null;
   navigate: (panel: MemberPanel) => void;
 }) {
   return (
@@ -1293,24 +1368,42 @@ function ProfilePanel({
         eyebrow="Member record"
         title="Profile"
         description="Manage personal details and jump to the account controls that protect them."
-        action={<StatusBadge status="Active" />}
+        action={
+          <StatusBadge
+            status={!profile ? "Loading" : profile.accountStatus === "active" ? "Active" : "Limited"}
+          />
+        }
       />
       <div className="profile-grid">
         <Card className="profile-card">
           <Avatar className="profile-avatar">
-            <AvatarFallback>{data.member.initials}</AvatarFallback>
+            <AvatarFallback>{profile?.initials ?? "…"}</AvatarFallback>
           </Avatar>
           <div>
-            <h3>{data.member.name}</h3>
-            <p>Member ID · {data.member.memberId}</p>
-            <p>{data.member.country} · Joined September 2026</p>
+            <h3>{profile?.name ?? "Loading…"}</h3>
+            <p>Member ID · {profile?.memberId || "…"}</p>
+            <p>
+              {profile ? `${profile.country} · Joined ${formatDate(profile.joinedAt)}` : "…"}
+            </p>
           </div>
         </Card>
         <Card className="detail-card">
-          <DetailRow label="Identity verification" value="Verified" status />
-          <DetailRow label="Phone number" value="Verified" status />
-          <DetailRow label="Account status" value="Active" status />
-          <DetailRow label="Current location" value="Nigeria" />
+          <DetailRow
+            label="Identity verification"
+            value={profile ? (profile.identityVerified ? "Verified" : "Pending") : "…"}
+            status
+          />
+          <DetailRow
+            label="Phone number"
+            value={profile ? (profile.phoneVerified ? "Verified" : "Pending") : "…"}
+            status
+          />
+          <DetailRow
+            label="Account status"
+            value={profile ? (profile.accountStatus === "active" ? "Active" : "Limited") : "…"}
+            status
+          />
+          <DetailRow label="Current location" value={profile?.country ?? "…"} />
         </Card>
         <div className="profile-actions">
           <QuickLink
@@ -1355,12 +1448,43 @@ function DetailRow({
 }
 
 function SecurityPanel({
+  api,
+  profile,
   navigate,
 }: {
+  api: AsaPhisApi;
+  profile: MemberProfile | null;
   navigate: (panel: MemberPanel) => void;
 }) {
-  const [mfa, setMfa] = useState(false);
-  const [sessionEnded, setSessionEnded] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const devicesQuery = useQuery({
+    queryKey: ["member-devices"],
+    queryFn: api.listDevices,
+  });
+  const sessionsQuery = useQuery({
+    queryKey: ["member-sessions"],
+    queryFn: api.listSessions,
+  });
+  const devices = devicesQuery.data ?? [];
+  const sessions = sessionsQuery.data ?? [];
+  const act = async (id: string, kind: "device" | "session") => {
+    setError("");
+    setBusyId(id);
+    try {
+      if (kind === "device") {
+        await api.revokeDevice(id);
+        await devicesQuery.refetch();
+      } else {
+        await api.terminateSession(id);
+        await sessionsQuery.refetch();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "This action could not be completed.");
+    } finally {
+      setBusyId(null);
+    }
+  };
   return (
     <div>
       <PanelHeader
@@ -1372,132 +1496,146 @@ function SecurityPanel({
       <div className="settings-grid">
         <Card className="settings-card">
           <p className="eyebrow">Verification</p>
-          <DetailRow label="Identity" value="Verified" status />
-          <DetailRow label="Phone" value="Verified" status />
-          <DetailRow label="Trusted device" value="MacBook Pro · Lagos" />
-          <Button
-            type="button"
-            className={`ap-control ${mfa ? "ap-control-dark" : "ap-control-outline"} security-button`}
-            variant={mfa ? "default" : "outline"}
-            onClick={() => setMfa(true)}
-          >
-            <LockKeyhole size={15} aria-hidden="true" />
-            {mfa ? "MFA enabled" : "Enable MFA"}
-          </Button>
+          <DetailRow
+            label="Identity"
+            value={profile ? (profile.identityVerified ? "Verified" : "Pending") : "…"}
+            status
+          />
+          <DetailRow
+            label="Phone"
+            value={profile ? (profile.phoneVerified ? "Verified" : "Pending") : "…"}
+            status
+          />
+          <DetailRow
+            label="Recognized devices"
+            value={devicesQuery.isLoading ? "…" : String(devices.length)}
+          />
           <p className="quiet-note">
-            {mfa
-              ? "MFA is enabled for this account."
-              : "MFA is not enabled yet."}
+            Only devices that signed in with your credentials are listed here.
           </p>
         </Card>
         <Card className="settings-card">
+          <p className="eyebrow">Trusted devices</p>
+          {devicesQuery.isLoading ? (
+            <StateStrip state="loading" message="Requesting your devices…" />
+          ) : devicesQuery.isError ? (
+            <StateStrip
+              state="error"
+              message="Devices could not be loaded."
+              onRetry={() => devicesQuery.refetch()}
+            />
+          ) : devices.length === 0 ? (
+            <StateStrip state="empty" message="No devices recorded for this account yet." />
+          ) : (
+            devices.map((device) => (
+              <div className="session-row" key={device.id}>
+                <div>
+                  <strong>{device.label}</strong>
+                  <span>{device.detail}</span>
+                </div>
+                {device.trusted ? (
+                  <StatusBadge status="Trusted" />
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="ap-control ap-control-outline"
+                    disabled={busyId === device.id}
+                    onClick={() => act(device.id, "device")}
+                  >
+                    Revoke
+                  </Button>
+                )}
+              </div>
+            ))
+          )}
+        </Card>
+        <Card className="settings-card">
           <p className="eyebrow">Active sessions</p>
-          <div className="session-row">
-            <div>
-              <strong>Chrome on macOS</strong>
-              <span>Lagos, Nigeria · Current session</span>
-            </div>
-            <StatusBadge status="Active" />
-          </div>
-          <div className="session-row">
-            <div>
-              <strong>Safari on iPhone</strong>
-              <span>Abuja, Nigeria · 2 days ago</span>
-            </div>
-            {sessionEnded ? (
-              <StatusBadge status="Expired" />
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="ap-control ap-control-outline"
-                onClick={() => setSessionEnded(true)}
-              >
-                Terminate
-              </Button>
-            )}
-          </div>
+          {sessionsQuery.isLoading ? (
+            <StateStrip state="loading" message="Requesting your sessions…" />
+          ) : sessionsQuery.isError ? (
+            <StateStrip
+              state="error"
+              message="Sessions could not be loaded."
+              onRetry={() => sessionsQuery.refetch()}
+            />
+          ) : sessions.length === 0 ? (
+            <StateStrip state="empty" message="No other active sessions besides this one." />
+          ) : (
+            sessions.map((session) => (
+              <div className="session-row" key={session.id}>
+                <div>
+                  <strong>{session.label}</strong>
+                  <span>{session.detail}</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="ap-control ap-control-outline"
+                  disabled={busyId === session.id}
+                  onClick={() => act(session.id, "session")}
+                >
+                  Terminate
+                </Button>
+              </div>
+            ))
+          )}
         </Card>
       </div>
-      <Card className="security-activity">
-        <p className="eyebrow">Recent security activity</p>
-        <div className="activity-row">
-          <div>
-            <strong>New login detected</strong>
-            <span>Chrome on macOS · Lagos, Nigeria</span>
-          </div>
-          <Badge variant="outline" className="rounded-full">
-            08 Sep
-          </Badge>
-        </div>
-        <div className="activity-row">
-          <div>
-            <strong>Identity verification completed</strong>
-            <span>NIN selected · provider response saved</span>
-          </div>
-          <StatusBadge status="Verified" />
-        </div>
-      </Card>
-      <Alert className="restriction-alert">
-        <AlertTriangle size={17} aria-hidden="true" />
-        <AlertTitle>Account Access Limited</AlertTitle>
-        <AlertDescription>
-          <p>
-            <strong>Reason:</strong> A travel approval is required when your
-            current location is outside the normal permitted region.
-          </p>
-          <div className="restriction-grid">
-            <div>
-              <strong>Affected features</strong>
-              <ul>
-                <li>New community submissions</li>
-                <li>Some protected documents</li>
-              </ul>
-            </div>
-            <div>
-              <strong>Still available</strong>
-              <ul>
-                <li>Public education previews</li>
-                <li>Existing notifications</li>
-                <li>Support center</li>
-              </ul>
-            </div>
-            <div>
-              <strong>How to resolve</strong>
-              <ul>
-                <li>Request Travel Access</li>
-                <li>Wait for review</li>
-              </ul>
-            </div>
-          </div>
-          <Button
-            type="button"
-            className="ap-control ap-control-dark"
-            onClick={() => navigate("support")}
-          >
-            Request support <ArrowRight size={14} aria-hidden="true" />
-          </Button>
-        </AlertDescription>
-      </Alert>
+      {error ? <StateStrip state="error" message={error} /> : null}
+      <Button
+        type="button"
+        className="ap-control ap-control-dark"
+        onClick={() => navigate("support")}
+      >
+        Request support <ArrowRight size={14} aria-hidden="true" />
+      </Button>
     </div>
   );
 }
 
-function TravelPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
+function TravelPanel({ api }: { api: AsaPhisApi }) {
   const [feedback, setFeedback] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [destination, setDestination] = useState("United Kingdom");
+  const historyQuery = useQuery({
+    queryKey: ["member-travel"],
+    queryFn: api.listTravelRequests,
+  });
+  const history = historyQuery.data ?? [];
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const result = await api.createTravelRequest({
-      destination,
-      startDate: "2026-10-01",
-      endDate: "2026-10-21",
-      reason: "Research visit and AsaPhis partner workshop.",
-    });
-    setFeedback(
-      `${result.id} submitted · Pending review in the local mock state.`,
-    );
+    setFeedback("");
+    setError("");
+    const form = new FormData(event.currentTarget);
+    const startDate = String(form.get("startDate") ?? "");
+    const endDate = String(form.get("endDate") ?? "");
+    const reason = String(form.get("reason") ?? "").trim();
+    const additionalInformation = String(form.get("additionalInformation") ?? "").trim();
+    if (!startDate || !endDate || !reason) {
+      setError("Choose travel dates and give a reason before submitting.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.createTravelRequest({
+        destination,
+        startDate,
+        endDate,
+        reason,
+        additionalInformation: additionalInformation || undefined,
+      });
+      setFeedback(`${result.id} submitted · status ${result.status}.`);
+      await historyQuery.refetch();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Your travel request could not be submitted.");
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <div>
@@ -1541,65 +1679,108 @@ function TravelPanel({ api, data }: { api: AsaPhisApi; data: DemoData }) {
             <div className="form-grid form-grid-two">
               <div className="form-field">
                 <Label htmlFor="start-date">Start date</Label>
-                <Input id="start-date" type="date" defaultValue="2026-10-01" />
+                <Input id="start-date" name="startDate" type="date" required />
               </div>
               <div className="form-field">
                 <Label htmlFor="end-date">End date</Label>
-                <Input id="end-date" type="date" defaultValue="2026-10-21" />
+                <Input id="end-date" name="endDate" type="date" required />
               </div>
             </div>
             <div className="form-field">
               <Label htmlFor="travel-reason">Reason</Label>
               <Textarea
                 id="travel-reason"
+                name="reason"
                 rows={3}
-                defaultValue="Research visit and AsaPhis partner workshop."
+                placeholder="Why do you need temporary access?"
+                required
               />
             </div>
             <div className="form-field">
               <Label htmlFor="travel-info">Additional information</Label>
               <Textarea
                 id="travel-info"
+                name="additionalInformation"
                 rows={3}
                 placeholder="Optional context"
               />
             </div>
-            <Button type="submit" className="ap-control ap-control-primary">
-              Submit request <ArrowRight size={15} aria-hidden="true" />
+            <Button
+              type="submit"
+              className="ap-control ap-control-primary"
+              disabled={busy}
+            >
+              {busy ? "Submitting…" : "Submit request"}{" "}
+              <ArrowRight size={15} aria-hidden="true" />
             </Button>
           </form>
           {feedback ? <StateStrip state="success" message={feedback} /> : null}
+          {error ? <StateStrip state="error" message={error} /> : null}
         </Card>
         <Card className="request-history">
           <p className="eyebrow">Request history</p>
-          {data.travelRequests.map((request) => (
-            <div className="detail-row" key={request.id}>
-              <span>
-                {request.destination} · {request.startDate}
-              </span>
-              <StatusBadge status={request.status} />
-            </div>
-          ))}
-          <p className="quiet-note">
-            Approved access always shows an expiration date.
-          </p>
+          {historyQuery.isLoading ? (
+            <StateStrip state="loading" message="Requesting your travel history…" />
+          ) : historyQuery.isError ? (
+            <StateStrip
+              state="error"
+              message="Travel history could not be loaded."
+              onRetry={() => historyQuery.refetch()}
+            />
+          ) : history.length === 0 ? (
+            <StateStrip state="empty" message="No travel requests yet. Approved access always shows an expiration date." />
+          ) : (
+            history.map((request) => (
+              <div className="detail-row" key={request.id}>
+                <span>
+                  {request.destination} · {request.startDate}
+                  {request.expiresAt ? ` · expires ${formatDate(request.expiresAt)}` : ""}
+                </span>
+                <StatusBadge status={request.status} />
+              </div>
+            ))
+          )}
         </Card>
       </div>
     </div>
   );
 }
 
-function SupportPanel({ api }: { api: AsaPhisApi; data: DemoData }) {
+function SupportPanel({ api }: { api: AsaPhisApi }) {
   const [feedback, setFeedback] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ticketsQuery = useQuery({
+    queryKey: ["member-support"],
+    queryFn: api.listSupportRequests,
+  });
+  const tickets = ticketsQuery.data ?? [];
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setFeedback("");
+    setError("");
     const form = new FormData(event.currentTarget);
-    const result = await api.createSupportRequest({
-      category: String(form.get("category")) as SupportCategory,
-      subject: String(form.get("subject")),
-      message: String(form.get("message")),
-    });
-    setFeedback(`${result.id} created · response timeline is now active.`);
+    const subject = String(form.get("subject") ?? "").trim();
+    const message = String(form.get("message") ?? "").trim();
+    if (!subject || !message) {
+      setError("Give your request a subject and message before sending.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.createSupportRequest({
+        category: String(form.get("category")) as SupportCategory,
+        subject,
+        message,
+      });
+      setFeedback(`${result.id} created · response timeline is now active.`);
+      event.currentTarget.reset();
+      await ticketsQuery.refetch();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Your support request could not be created.");
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <div>
@@ -1678,7 +1859,7 @@ function SupportPanel({ api }: { api: AsaPhisApi; data: DemoData }) {
               <Input
                 id="support-subject"
                 name="subject"
-                defaultValue="I need help with my access"
+                placeholder="Brief summary of the issue"
               />
             </div>
             <div className="form-field">
@@ -1690,11 +1871,51 @@ function SupportPanel({ api }: { api: AsaPhisApi; data: DemoData }) {
                 placeholder="Tell us what happened and what you need."
               />
             </div>
-            <Button type="submit" className="ap-control ap-control-primary">
-              Create support request <Send size={15} aria-hidden="true" />
+            <Button
+              type="submit"
+              className="ap-control ap-control-primary"
+              disabled={busy}
+            >
+              {busy ? "Sending…" : "Create support request"}{" "}
+              <Send size={15} aria-hidden="true" />
             </Button>
           </form>
           {feedback ? <StateStrip state="success" message={feedback} /> : null}
+          {error ? <StateStrip state="error" message={error} /> : null}
+          <p className="eyebrow response-label">Your requests</p>
+          {ticketsQuery.isLoading ? (
+            <StateStrip state="loading" message="Requesting your support history…" />
+          ) : ticketsQuery.isError ? (
+            <StateStrip
+              state="error"
+              message="Support history could not be loaded."
+              onRetry={() => ticketsQuery.refetch()}
+            />
+          ) : tickets.length === 0 ? (
+            <StateStrip state="empty" message="No support requests yet. New requests and replies will appear here." />
+          ) : (
+            <div className="ticket-history">
+              {tickets.map((ticket) => (
+                <div className="detail-row" key={ticket.id}>
+                  <span>
+                    <strong>{ticket.subject}</strong>
+                    <small>
+                      {ticket.category} · {formatDate(ticket.createdAt)} · {ticket.responses.length} replies
+                    </small>
+                  </span>
+                  <StatusBadge
+                    status={
+                      ticket.status === "resolved"
+                        ? "Resolved"
+                        : ticket.status === "pending"
+                          ? "Pending"
+                          : "Open"
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          )}
           <p className="eyebrow response-label">Response timeline</p>
           <div className="response-timeline">
             <div>

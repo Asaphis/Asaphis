@@ -12,7 +12,11 @@ export class SecurityController {
 
   @Get('events')
   events() {
-    return this.prisma.riskEvent.findMany({ orderBy: { createdAt: 'desc' }, take: 100 });
+    return this.prisma.riskEvent.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+      include: { user: { select: { email: true, member: { select: { displayName: true, memberCode: true } } } } },
+    });
   }
 
   @Post('events/:id/status')
@@ -22,7 +26,11 @@ export class SecurityController {
 
   @Get('sessions')
   sessions() {
-    return this.prisma.session.findMany({ orderBy: { lastActiveAt: 'desc' }, take: 100 });
+    return this.prisma.session.findMany({
+      orderBy: { lastActiveAt: 'desc' },
+      take: 100,
+      include: { device: true, user: { select: { email: true, member: { select: { displayName: true, memberCode: true } } } } },
+    });
   }
 
   @Post('sessions/:id/terminate')
@@ -34,7 +42,11 @@ export class SecurityController {
 
   @Get('devices')
   devices() {
-    return this.prisma.device.findMany({ orderBy: { lastSeenAt: 'desc' }, take: 100 });
+    return this.prisma.device.findMany({
+      orderBy: { lastSeenAt: 'desc' },
+      take: 100,
+      include: { user: { select: { email: true, member: { select: { displayName: true, memberCode: true } } } } },
+    });
   }
 
   @Post('devices/:id/revoke')

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -26,9 +26,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
 import type { AsaPhisApi } from "@/lib/api/contracts";
 import type {
   Country,
+  CountryConfig,
   IdentityDocument,
   OnboardingState,
   PaymentMethod,
@@ -84,8 +86,37 @@ export function JoinJourney({
   const [countryPickerOpen, setCountryPickerOpen] = useState(false);
   const [phoneSent, setPhoneSent] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [identityFileName, setIdentityFileName] = useState("");
+  const [identityFileToken, setIdentityFileToken] = useState<string | null>(null);
+  const [uploadingIdentity, setUploadingIdentity] = useState(false);
 
-  const countryConfig = demoData.countryConfigs[state.currentLocation];
+  // Real country config from the backend; seed is display fallback only.
+  // Payment amounts and identity options always sync from the real config
+  // when it arrives so members never pay seed amounts.
+  const configQuery = useQuery({
+    queryKey: ["country-config", state.currentLocation],
+    queryFn: () => api.getCountryConfig(state.currentLocation),
+    staleTime: 300_000,
+  });
+  const countryConfig: CountryConfig =
+    configQuery.data ?? demoData.countryConfigs[state.currentLocation];
+  const syncedCountry = useRef<string | null>(null);
+  useEffect(() => {
+    if (!configQuery.data || syncedCountry.current === state.currentLocation) return;
+    syncedCountry.current = state.currentLocation;
+    const cfg = configQuery.data;
+    setState((current) => ({
+      ...current,
+      identityDocument: (cfg.identityDocuments[0] ?? current.identityDocument) as IdentityDocument,
+      contribution: {
+        ...current.contribution,
+        amount: Number(cfg.contribution.amount) || current.contribution.amount,
+        currency: cfg.contribution.currency || current.contribution.currency,
+        method: (cfg.contribution.methods[0] ?? current.contribution.method) as PaymentMethod,
+      },
+    }));
+  }, [configQuery.data, state.currentLocation]);
   const progress = ((state.stepIndex + 1) / onboardingSteps.length) * 100;
   const currentStep = onboardingSteps[state.stepIndex];
 
@@ -108,17 +139,25 @@ export function JoinJourney({
   );
 
   const sendPhone = async () => {
-    await api.sendPhoneCode({
+    const result = await api.sendPhoneCode({
       number: state.phone.number,
       channel: state.phone.channel,
+    });
+    setChallengeId(result.challengeId);
+    setPhone({
+      resendSeconds: result.resendAfterSeconds,
     });
     setPhoneSent(true);
     setFeedback(`A verification code was sent by ${state.phone.channel}.`);
   };
 
   const verifyPhone = async () => {
+    if (!challengeId) {
+      setFeedback("Send a verification code first.");
+      return;
+    }
     const result = await api.verifyPhoneCode({
-      challengeId: "mock-phone-challenge",
+      challengeId,
       code: state.phone.otp,
     });
     setPhone({ verified: result.verified });
@@ -127,6 +166,22 @@ export function JoinJourney({
         ? "Phone verified successfully."
         : "We could not verify that code.",
     );
+  };
+
+  const uploadIdentityFile = async (file: File | null) => {
+    setIdentityFileName(file?.name ?? "");
+    setIdentityFileToken(null);
+    if (!file) return;
+    setUploadingIdentity(true);
+    try {
+      const out = await api.uploadFile("identity", file);
+      setIdentityFileToken(out.fileToken);
+      setFeedback("Identity document uploaded.");
+    } catch (err) {
+      setFeedback(err instanceof Error ? err.message : "Document upload failed. Try a JPG, PNG, or PDF.");
+    } finally {
+      setUploadingIdentity(false);
+    }
   };
 
   const runSecurity = async () => {
@@ -140,34 +195,33 @@ export function JoinJourney({
   };
 
   const setCountry = (country: Country) => {
-    const config = demoData.countryConfigs[country];
-    setState((current) => ({
-      ...current,
-      currentLocation: country,
-      identityDocument: config.identityDocuments[0],
-      contribution: {
-        ...current.contribution,
-        amount: config.contribution.amount,
-        currency: config.contribution.currency,
-        method: config.contribution.methods[0],
-      },
-    }));
+    // Real config syncs in through the query effect above; close immediately.
+    setPatch({ currentLocation: country });
     setCountryPickerOpen(false);
   };
 
   const updatePayment = async (status: PaymentStatus) => {
-    setContribution({ status });
-    setFeedback(
-      status === "Successful"
-        ? "Contribution recorded. Continue to activate your membership."
-        : `Payment status: ${status}.`,
-    );
-    if (status === "Successful")
-      await api.createContribution({
+    // The recorded status always comes from the backend, never from tapping
+    // a button. Non-start actions only update the local note.
+    if (status !== "Successful") {
+      setContribution({ status });
+      setFeedback(`Payment status: ${status}.`);
+      return;
+    }
+    try {
+      const created = await api.createContribution({
         amount: state.contribution.amount,
         currency: state.contribution.currency,
         method: state.contribution.method,
       });
+      setContribution({ status: "Pending" });
+      setFeedback(
+        `Contribution ${created.id} recorded as pending. It activates after provider confirmation.`,
+      );
+    } catch (err) {
+      setContribution({ status: "Failed" });
+      setFeedback(err instanceof Error ? err.message : "Contribution could not be started.");
+    }
   };
 
   const next = async () => {
@@ -177,10 +231,14 @@ export function JoinJourney({
       return;
     }
     if (state.stepIndex === 3) {
+      if (!identityFileToken) {
+        setFeedback("Upload your identity document first.");
+        return;
+      }
       const result = await api.submitIdentity({
         country: state.currentLocation,
         document: state.identityDocument,
-        fileToken: "upload-token",
+        fileToken: identityFileToken,
       });
       setPatch({ identityStatus: result.status });
     }
@@ -190,10 +248,10 @@ export function JoinJourney({
     }
     if (
       state.stepIndex === 5 &&
-      !["Successful", "Processing"].includes(state.contribution.status)
+      !["Successful", "Processing", "Pending"].includes(state.contribution.status)
     ) {
       setFeedback(
-        "Choose a successful or processing payment state before continuing. Activation is blocked for failed or cancelled payments.",
+        "Record a contribution first — it stays pending until the provider confirms it. Activation is blocked for failed or cancelled payments.",
       );
       return;
     }
@@ -307,7 +365,10 @@ export function JoinJourney({
               <IdentityStep
                 state={state}
                 options={identityOptions}
+                fileName={identityFileName}
+                uploading={uploadingIdentity}
                 onChange={(identityDocument) => setPatch({ identityDocument })}
+                onFile={uploadIdentityFile}
               />
             ) : null}
             {state.stepIndex === 4 ? (
@@ -645,11 +706,17 @@ function CountryStep({
 function IdentityStep({
   state,
   options,
+  fileName,
+  uploading,
   onChange,
+  onFile,
 }: {
   state: OnboardingState;
   options: IdentityDocument[];
+  fileName: string;
+  uploading: boolean;
   onChange: (value: IdentityDocument) => void;
+  onFile: (file: File | null) => void;
 }) {
   return (
     <div>
@@ -679,14 +746,21 @@ function IdentityStep({
           </button>
         ))}
       </div>
-      <div className="upload-placeholder">
+      <label className="upload-placeholder" htmlFor="identity-file">
         <FileCheck2 size={22} aria-hidden="true" />
         <div>
           <strong>Secure upload</strong>
-          <span>PDF, JPG or PNG up to 10MB.</span>
+          <span>{fileName || "PDF, JPG or PNG up to 10MB."}</span>
         </div>
-        <span className="status-chip">Ready</span>
-      </div>
+        <span className="status-chip">{uploading ? "Uploading…" : fileName ? "Uploaded" : "Choose file"}</span>
+        <input
+          id="identity-file"
+          type="file"
+          accept="image/jpeg,image/png,application/pdf"
+          hidden
+          onChange={(event) => onFile(event.target.files?.[0] ?? null)}
+        />
+      </label>
       <div className="privacy-note">
         <LockKeyhole size={17} aria-hidden="true" />
         <span>Only required information is requested.</span>
@@ -752,7 +826,7 @@ function ContributionStep({
   onStatus,
 }: {
   state: OnboardingState;
-  config: (typeof demoData.countryConfigs)[string];
+  config: CountryConfig;
   onChange: (value: Partial<OnboardingState["contribution"]>) => void;
   onStatus: (status: PaymentStatus) => void;
 }) {

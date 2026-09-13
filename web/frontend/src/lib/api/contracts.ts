@@ -93,9 +93,16 @@ export interface MemberApi {
     message: string
   }): Promise<SupportRequest>
   listSupportRequests(): Promise<SupportRequest[]>
+  listSubmissions(): Promise<SubmissionRecord[]>
+  listTravelRequests(): Promise<TravelRequest[]>
+  listDevices(): Promise<{ id: string; label: string; detail: string; trusted: boolean }[]>
+  listSessions(): Promise<{ id: string; label: string; detail: string }[]>
+  terminateSession(id: string): Promise<{ terminated: boolean }>
+  revokeDevice(id: string): Promise<{ revoked: boolean }>
   getPaymentConfig(): Promise<
     { countryCode: string; currency: string; amount: number; providers: string[]; methods: string[] }[]
   >
+  listUpdates(): Promise<import("@/lib/types").UpdateEntry[]>
   uploadFile(kind: string, file: File): Promise<{ fileId: string; fileToken: string }>
 }
 

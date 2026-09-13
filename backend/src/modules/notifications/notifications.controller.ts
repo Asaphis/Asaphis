@@ -20,8 +20,9 @@ export class NotificationsController {
 
   @Get()
   mine(@CurrentUser() user: { sub: string }, @Query('category') category?: string) {
+    // Members see their own rows plus admin broadcasts (userId null = all members).
     return this.prisma.notification.findMany({
-      where: { userId: user.sub, ...(category ? { category } : {}) },
+      where: { OR: [{ userId: user.sub }, { userId: null }], ...(category ? { category } : {}) },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,33 +15,41 @@ import { formatAdminDate } from "@/lib/admin-types";
 
 const groups = ["General", "Branding", "Countries", "Verification", "Payments", "Notifications", "Security", "Community", "Moderation", "Privacy", "Feature flags", "Admin users", "Integrations"];
 
-const flagDefaults = [
-  { key: "memberChat", label: "Member-to-member chat", on: false, note: "Disabled for version 1." },
-  { key: "trustedLowRiskPublishing", label: "Trusted fast-track publishing", on: false, note: "Lower friction for trusted members on low-risk content." },
-  { key: "travelAutoExpiry", label: "Automatic travel expiry", on: true, note: "Permissions end at the displayed time." },
-  { key: "vpnStrictMode", label: "Strict VPN review", on: true, note: "Flag VPN sessions for security review." },
-];
-
-const directory = [
-  { name: "Adaeze Okonkwo", email: "adaeze@asaphis.org", role: "Super Admin", lastActive: "2026-09-08" },
-  { name: "Sara Bakare", email: "sara@asaphis.org", role: "Security Admin", lastActive: "2026-09-08" },
-  { name: "Chidi Eze", email: "chidi@asaphis.org", role: "Content Admin", lastActive: "2026-09-07" },
-  { name: "Lena Mensimah", email: "lena@asaphis.org", role: "Moderator", lastActive: "2026-09-07" },
-  { name: "Rami Haddad", email: "rami@asaphis.org", role: "Finance Admin", lastActive: "2026-09-06" },
-];
-
 export default function SettingsPage() {
   const api = useAdminApi();
+  const queryClient = useQueryClient();
   const { admin } = useAdminAuth();
   const [group, setGroup] = useState("General");
-  const [flags, setFlags] = useState(flagDefaults);
+  const [orgName, setOrgName] = useState("");
+  const [opsContact, setOpsContact] = useState("");
   const [saved, setSaved] = useState(false);
   const audit = useQuery({ queryKey: ["admin-settings-audit"], queryFn: () => api.listAuditEvents() });
+  const flagsQuery = useQuery({ queryKey: ["admin-flags"], queryFn: () => api.listFeatureFlags(), enabled: group === "Feature flags" });
+  const directoryQuery = useQuery({ queryKey: ["admin-directory"], queryFn: () => api.listAdmins(), enabled: group === "Admin users" });
+  const appSettingsQuery = useQuery({ queryKey: ["admin-app-settings"], queryFn: () => api.getAppSettings(), enabled: group === "General" });
+  const providersQuery = useQuery({ queryKey: ["admin-providers-settings"], queryFn: () => api.listProviders(), enabled: group === "Integrations" });
 
-  const save = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  };
+  const toggleFlag = useMutation({
+    mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) => api.setFeatureFlag(key, enabled),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin-flags"] }),
+  });
+
+  const saveGeneral = useMutation({
+    mutationFn: async () => {
+      if (orgName.trim()) await api.setAppSetting("ORG_NAME", orgName.trim());
+      if (opsContact.trim()) await api.setAppSetting("OPS_CONTACT", opsContact.trim());
+    },
+    onSuccess: () => {
+      setSaved(true);
+      setOrgName("");
+      setOpsContact("");
+      queryClient.invalidateQueries({ queryKey: ["admin-app-settings"] });
+      setTimeout(() => setSaved(false), 2500);
+    },
+  });
+
+  const storedOrg = String(appSettingsQuery.data?.ORG_NAME ?? "");
+  const storedContact = String(appSettingsQuery.data?.OPS_CONTACT ?? "");
 
   return (
     <AdminShell title="Settings" subtitle="Platform configuration. Signed in as Super Admin controls with full audit.">
@@ -52,32 +60,42 @@ export default function SettingsPage() {
       </div>
 
       {group === "General" ? (
-        <SectionCard title="General" intro="Organization name, contact, and timezone." action={saved ? <span style={{ fontSize: 12, color: "var(--ok)" }}>Saved.</span> : undefined}>
-          <div className="form-field"><Label htmlFor="s-org">Organization name</Label><Input id="s-org" defaultValue="AsaPhis ORG" /></div>
-          <div className="form-field"><Label htmlFor="s-contact">Operations contact</Label><Input id="s-contact" defaultValue="ops@asaphis.org" /></div>
-          <Button type="button" style={{ marginTop: 12 }} onClick={save}>Save general settings</Button>
+        <SectionCard title="General" intro="Organization name and operations contact, stored in the backend." action={saved ? <span style={{ fontSize: 12, color: "var(--ok)" }}>Saved.</span> : undefined}>
+          <QueryState loading={appSettingsQuery.isLoading} error={appSettingsQuery.error} empty={false} emptyText="" onRetry={() => appSettingsQuery.refetch()}>
+            <div className="form-field"><Label htmlFor="s-org">Organization name</Label><Input id="s-org" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder={storedOrg || "AsaPhis ORG"} /></div>
+            <div className="form-field"><Label htmlFor="s-contact">Operations contact</Label><Input id="s-contact" value={opsContact} onChange={(e) => setOpsContact(e.target.value)} placeholder={storedContact || "ops@asaphis.org"} /></div>
+            <Button type="button" style={{ marginTop: 12 }} disabled={saveGeneral.isPending || (!orgName.trim() && !opsContact.trim())} onClick={() => saveGeneral.mutate()}>
+              {saveGeneral.isPending ? "Saving…" : "Save general settings"}
+            </Button>
+          </QueryState>
         </SectionCard>
       ) : null}
 
       {group === "Feature flags" ? (
         <SectionCard title="Feature flags" intro="Roll out behavior without code changes.">
-          {flags.map((f) => (
-            <div key={f.key} className="admin-detail-row">
-              <span><strong style={{ color: "var(--foreground)" }}>{f.label}</strong><span className="admin-row-sub">{f.note}</span></span>
-              <Button type="button" size="sm" variant="outline" onClick={() => setFlags(flags.map((x) => x.key === f.key ? { ...x, on: !x.on } : x))}>{f.on ? "On — turn off" : "Off — turn on"}</Button>
-            </div>
-          ))}
+          <QueryState loading={flagsQuery.isLoading} error={flagsQuery.error} empty={!flagsQuery.data || flagsQuery.data.length === 0} emptyText="No feature flags stored yet." onRetry={() => flagsQuery.refetch()}>
+            {(flagsQuery.data ?? []).map((f) => (
+              <div key={f.key} className="admin-detail-row">
+                <span><strong style={{ color: "var(--foreground)" }}>{f.key}</strong></span>
+                <Button type="button" size="sm" variant="outline" disabled={toggleFlag.isPending} onClick={() => toggleFlag.mutate({ key: f.key, enabled: !f.enabled })}>
+                  {f.enabled ? "On — turn off" : "Off — turn on"}
+                </Button>
+              </div>
+            ))}
+          </QueryState>
         </SectionCard>
       ) : null}
 
       {group === "Admin users" ? (
         <SectionCard title="Admin users" intro="Least privilege: everyone sees only their areas.">
-          {directory.map((u) => (
-            <div key={u.email} className="admin-detail-row">
-              <span><strong style={{ color: "var(--foreground)" }}>{u.name}</strong><span className="admin-row-sub">{u.email} · active {formatAdminDate(u.lastActive)}</span></span>
-              <StatusBadge status={u.role} />
-            </div>
-          ))}
+          <QueryState loading={directoryQuery.isLoading} error={directoryQuery.error} empty={!directoryQuery.data || directoryQuery.data.length === 0} emptyText="No admin accounts found." onRetry={() => directoryQuery.refetch()}>
+            {(directoryQuery.data ?? []).map((u) => (
+              <div key={u.email} className="admin-detail-row">
+                <span><strong style={{ color: "var(--foreground)" }}>{u.name}</strong><span className="admin-row-sub">{u.email}{u.lastActive ? ` · active ${formatAdminDate(u.lastActive)}` : ""}</span></span>
+                <StatusBadge status={u.role} />
+              </div>
+            ))}
+          </QueryState>
           <p className="admin-subtitle" style={{ marginTop: 10 }}>Signed in as {admin?.name} · {admin?.role}. Invites go through verified work email in production.</p>
         </SectionCard>
       ) : null}
@@ -85,9 +103,14 @@ export default function SettingsPage() {
       {group === "Integrations" ? (
         <SectionCard title="Integrations" intro="Provider connections without exposing secrets.">
           <div className="admin-secret-note"><KeyRound size={14} aria-hidden="true" /><span>Verification and payment secrets are stored in secret management. This screen only references them and tests connectivity.</span></div>
-          <div className="admin-detail-row" style={{ marginTop: 10 }}><span>Verification · Provider A</span><StatusBadge status="Ready" /></div>
-          <div className="admin-detail-row"><span>Verification · Provider B</span><StatusBadge status="Ready" /></div>
-          <div className="admin-detail-row"><span>Payments · Paystack / Flutterwave / Stripe</span><StatusBadge status="Ready" /></div>
+          <QueryState loading={providersQuery.isLoading} error={providersQuery.error} empty={!providersQuery.data || providersQuery.data.length === 0} emptyText="No providers configured." onRetry={() => providersQuery.refetch()}>
+            {(providersQuery.data ?? []).map((p) => (
+              <div className="admin-detail-row" key={p.id} style={{ marginTop: 10 }}>
+                <span>{p.name}{p.enabled ? "" : " (disabled)"}</span>
+                <StatusBadge status={p.secretConfigured ? "Ready" : "No secret"} />
+              </div>
+            ))}
+          </QueryState>
         </SectionCard>
       ) : null}
 

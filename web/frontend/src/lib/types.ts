@@ -217,6 +217,13 @@ export interface NotificationRecord {
   read: boolean
 }
 
+export interface UpdateEntry {
+  id: string
+  title: string
+  body: string
+  date: string
+}
+
 export interface TravelRequest {
   id: string
   destination: string

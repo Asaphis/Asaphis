@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { AdminRole } from "@/lib/admin-types";
 import { adminRoleLabels } from "@/lib/admin-types";
+import { queryClient } from "@/lib/query-client";
 
 export interface AdminSession {
   name: string;
@@ -162,6 +163,8 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       // ignore
     }
     persist(null);
+    // Drop every cached admin row so the next sign-in starts clean.
+    queryClient.clear();
   }, [persist]);
 
   const can = useCallback((area: AdminArea) => (admin ? roleAccess[admin.role].includes(area) : false), [admin]);
