@@ -19,6 +19,10 @@ import { TravelModule } from './modules/travel/travel.module';
 import { RestrictionsModule } from './modules/restrictions/restrictions.module';
 import { ContentModule } from './modules/content/content.module';
 import { CommunityModule } from './modules/community/community.module';
+import { SocialModule } from './modules/social/social.module';
+import { FriendsModule } from './modules/friends/friends.module';
+import { MessagesModule } from './modules/messages/messages.module';
+import { GroupsModule } from './modules/groups/groups.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { SupportModule } from './modules/support/support.module';
@@ -61,6 +65,10 @@ import { RolesGuard } from './common/guards/roles.guard';
     RestrictionsModule,
     ContentModule,
     CommunityModule,
+    SocialModule,
+    FriendsModule,
+    MessagesModule,
+    GroupsModule,
     NotificationsModule,
     PaymentsModule,
     SupportModule,

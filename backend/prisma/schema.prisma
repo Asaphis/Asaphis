@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
@@ -160,211 +160,220 @@ enum RestrictionType {
 // ============ Identity / users ============
 
 model User {
-  id               String          @id @default(cuid())
-  email            String          @unique
-  emailVerifiedAt  DateTime?
-  phone            String?
-  phoneVerifiedAt  DateTime?
-  passwordHash     String?
-  roles            UserRole[]      @default([MEMBER])
-  accountStatus    AccountStatus   @default(ACTIVE)
-  membershipStage  MembershipStage @default(REGISTERED)
-  termsAcceptedAt  DateTime?
+  id                String          @id @default(cuid())
+  email             String          @unique
+  emailVerifiedAt   DateTime?
+  phone             String?
+  phoneVerifiedAt   DateTime?
+  passwordHash      String?
+  roles             UserRole[]      @default([MEMBER])
+  accountStatus     AccountStatus   @default(ACTIVE)
+  membershipStage   MembershipStage @default(REGISTERED)
+  termsAcceptedAt   DateTime?
   privacyAcceptedAt DateTime?
-  mfaEnabled       Boolean         @default(false)
-  mfaSecret        String?
-  failedLoginCount Int             @default(0)
-  lockedUntil      DateTime?
-  lastLoginAt      DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  deletedAt        DateTime?
+  mfaEnabled        Boolean         @default(false)
+  mfaSecret         String?
+  failedLoginCount  Int             @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
 
-  member              Member?
-  devices             Device[]
-  sessions            Session[]
-  identityProfile     IdentityProfile?
-  phoneVerifications  PhoneVerification[]
-  travelRequests      TravelRequest[]
-  restrictions        Restriction[]
-  supportRequests     SupportRequest[]
-  payments            Payment[]
-  notifications       Notification[]
-  notificationPrefs   NotificationPreference?
-  accessDecisions     AccessDecisionLog[]
-  riskEvents          RiskEvent[]
-  auditLogs           AuditLog[]
-  files               FileAsset[]
+  member                     Member?
+  devices                    Device[]
+  sessions                   Session[]
+  identityProfile            IdentityProfile?
+  authoredPosts              Post[]                    @relation("PostAuthor")
+  postLikes                  PostLike[]
+  postComments               PostComment[]
+  reportsMade                Report[]
+  friendshipsRequested       Friendship[]              @relation("FriendRequester")
+  friendshipsReceived        Friendship[]              @relation("FriendAddressee")
+  groupMemberships           GroupMember[]
+  conversationParticipations ConversationParticipant[]
+  sentMessages               DirectMessage[]
+  phoneVerifications         PhoneVerification[]
+  travelRequests             TravelRequest[]
+  restrictions               Restriction[]
+  supportRequests            SupportRequest[]
+  payments                   Payment[]
+  notifications              Notification[]
+  notificationPrefs          NotificationPreference?
+  accessDecisions            AccessDecisionLog[]
+  riskEvents                 RiskEvent[]
+  auditLogs                  AuditLog[]
+  files                      FileAsset[]
 
   @@index([email])
   @@index([accountStatus])
 }
 
 model Member {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  memberCode      String   @unique // e.g. MEM-NG-240918
-  displayName     String
-  initials        String?
+  id                 String    @id @default(cuid())
+  userId             String    @unique
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memberCode         String    @unique // e.g. MEM-NG-240918
+  displayName        String
+  initials           String?
   citizenshipCountry String? // verified eligibility country code
-  currentCountry  String?
-  joinedAt        DateTime @default(now())
-  activatedAt     DateTime?
-  trustStatus     String   @default("standard") // trusted|standard|watch|restricted
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  currentCountry     String?
+  joinedAt           DateTime  @default(now())
+  activatedAt        DateTime?
+  trustStatus        String    @default("standard") // trusted|standard|watch|restricted
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@index([memberCode])
   @@index([citizenshipCountry])
 }
 
 model Country {
-  code               String   @id // ISO-2 e.g. NG
-  name               String
-  enabled            Boolean  @default(true)
-  allowedDocuments   String[] @default([])
-  verificationProvider String @default("mock")
-  govIdCheckEnabled  Boolean  @default(false)
-  phoneRequired      Boolean  @default(true)
-  livenessRequired   Boolean  @default(true)
-  manualReview       Boolean  @default(true)
-  eligibilityRule    String   @default("")
-  travelRule         String   @default("")
-  accessRule         String   @default("")
-  currency           String   @default("USD")
-  contributionAmount Decimal? @db.Decimal(12, 2)
-  paymentProviders   String[] @default([])
-  paymentMethods     String[] @default([])
-  usesGlobalFallback Boolean  @default(true)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  code                 String   @id // ISO-2 e.g. NG
+  name                 String
+  enabled              Boolean  @default(true)
+  allowedDocuments     String[] @default([])
+  verificationProvider String   @default("mock")
+  govIdCheckEnabled    Boolean  @default(false)
+  phoneRequired        Boolean  @default(true)
+  livenessRequired     Boolean  @default(true)
+  manualReview         Boolean  @default(true)
+  eligibilityRule      String   @default("")
+  travelRule           String   @default("")
+  accessRule           String   @default("")
+  currency             String   @default("USD")
+  contributionAmount   Decimal? @db.Decimal(12, 2)
+  paymentProviders     String[] @default([])
+  paymentMethods       String[] @default([])
+  usesGlobalFallback   Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
 
 model CountryRule {
-  id        String   @id @default(cuid())
+  id          String   @id @default(cuid())
   countryCode String
-  key       String   // e.g. ALLOWED_ID_DOCS, PHONE_REQUIRED
-  value     Json
-  updatedBy String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  key         String // e.g. ALLOWED_ID_DOCS, PHONE_REQUIRED
+  value       Json
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@unique([countryCode, key])
 }
 
 model VerificationProvider {
-  id               String   @id @default(cuid())
-  name             String   @unique
-  kind             String   // phone | identity | payment
-  enabled          Boolean  @default(true)
-  priority         Int      @default(100)
-  config           Json     @default("{}")
-  secretConfigured Boolean  @default(false)
+  id               String    @id @default(cuid())
+  name             String    @unique
+  kind             String // phone | identity | payment
+  enabled          Boolean   @default(true)
+  priority         Int       @default(100)
+  config           Json      @default("{}")
+  secretConfigured Boolean   @default(false)
   lastTestedAt     DateTime?
   lastTestResult   String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model PhoneVerification {
-  id           String       @id @default(cuid())
-  userId       String
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  phone        String
-  channel      PhoneChannel @default(SMS)
-  provider     String       @default("mock")
-  otpHash      String
-  expiresAt    DateTime
-  consumedAt   DateTime?
-  attempts     Int          @default(0)
-  maxAttempts  Int          @default(5)
-  resendCount  Int          @default(0)
-  lastSentAt   DateTime     @default(now())
-  ip           String?
-  deviceId     String?
-  createdAt    DateTime     @default(now())
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone       String
+  channel     PhoneChannel @default(SMS)
+  provider    String       @default("mock")
+  otpHash     String
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  attempts    Int          @default(0)
+  maxAttempts Int          @default(5)
+  resendCount Int          @default(0)
+  lastSentAt  DateTime     @default(now())
+  ip          String?
+  deviceId    String?
+  createdAt   DateTime     @default(now())
 
   @@index([userId, createdAt])
   @@index([phone])
 }
 
 model IdentityProfile {
-  id                 String         @id @default(cuid())
-  userId             String         @unique
-  user               User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  countryCode        String?
-  documentType       String?
-  status             IdentityStatus @default(NOT_STARTED)
-  verifiedAt         DateTime?
-  expiresAt          DateTime?
-  provider           String         @default("mock")
-  providerReference  String?
-  matchScore         Decimal?       @db.Decimal(5, 4)
+  id                String         @id @default(cuid())
+  userId            String         @unique
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  countryCode       String?
+  documentType      String?
+  status            IdentityStatus @default(NOT_STARTED)
+  verifiedAt        DateTime?
+  expiresAt         DateTime?
+  provider          String         @default("mock")
+  providerReference String?
+  matchScore        Decimal?       @db.Decimal(5, 4)
   // PII minimisation: store only hashes / last4 where possible
-  documentHash       String?
-  idNumberLast4      String?
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
+  documentHash      String?
+  idNumberLast4     String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   verifications IdentityVerification[]
   documents     IdentityDocument[]
 }
 
 model IdentityVerification {
-  id              String            @id @default(cuid())
-  profileId       String
-  profile         IdentityProfile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  provider        String            @default("mock")
-  status          VerificationResult @default(PENDING)
-  resultSummary   String?
-  rawResponse     Json?
-  riskIndicators  String[]          @default([])
-  reviewedBy      String?
-  reviewedAt      DateTime?
-  reviewNote      String?
-  createdAt       DateTime          @default(now())
+  id             String             @id @default(cuid())
+  profileId      String
+  profile        IdentityProfile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  provider       String             @default("mock")
+  status         VerificationResult @default(PENDING)
+  resultSummary  String?
+  rawResponse    Json?
+  riskIndicators String[]           @default([])
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  reviewNote     String?
+  createdAt      DateTime           @default(now())
 
   @@index([profileId, createdAt])
 }
 
 model IdentityDocument {
-  id          String   @id @default(cuid())
-  profileId   String
-  profile     IdentityProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  fileId      String
-  file        FileAsset @relation(fields: [fileId], references: [id])
+  id           String          @id @default(cuid())
+  profileId    String
+  profile      IdentityProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  fileId       String
+  file         FileAsset       @relation(fields: [fileId], references: [id])
   documentType String
-  mimeType    String
-  sizeBytes   Int
-  checksum    String?
-  createdAt   DateTime @default(now())
+  mimeType     String
+  sizeBytes    Int
+  checksum     String?
+  createdAt    DateTime        @default(now())
 }
 
 // ============ Devices / sessions / risk ============
 
 model Device {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  deviceKey   String   // hashed credential / fingerprint
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceKey   String // hashed credential / fingerprint
   label       String?
   deviceType  String?
   os          String?
   browser     String?
-  firstSeenAt DateTime @default(now())
-  lastSeenAt  DateTime @default(now())
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
   lastIp      String?
   lastCountry String?
-  trusted     Boolean  @default(false)
+  trusted     Boolean   @default(false)
   revokedAt   DateTime?
   riskLevel   RiskLevel @default(LOW)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  sessions    Session[]
 
   @@unique([userId, deviceKey])
   @@index([userId, lastSeenAt])
-  sessions Session[]
 }
 
 model Session {
@@ -389,17 +398,17 @@ model Session {
 }
 
 model RiskEvent {
-  id               String    @id @default(cuid())
-  userId           String?
-  user             User?     @relation(fields: [userId], references: [id])
-  sessionId        String?
-  type             String
-  signals          Json      @default("{}")
-  previousCountry  String?
-  currentCountry   String?
-  level            RiskLevel @default(LOW)
-  status           String    @default("open") // open|reviewing|resolved
-  createdAt        DateTime  @default(now())
+  id              String    @id @default(cuid())
+  userId          String?
+  user            User?     @relation(fields: [userId], references: [id])
+  sessionId       String?
+  type            String
+  signals         Json      @default("{}")
+  previousCountry String?
+  currentCountry  String?
+  level           RiskLevel @default(LOW)
+  status          String    @default("open") // open|reviewing|resolved
+  createdAt       DateTime  @default(now())
 
   @@index([userId, createdAt])
   @@index([level, status])
@@ -429,15 +438,15 @@ model AccessPolicy {
 }
 
 model AccessDecisionLog {
-  id         String         @id @default(cuid())
-  userId     String?
-  user       User?          @relation(fields: [userId], references: [id])
-  action     String
-  resource   String?
-  decision   AccessDecision
-  reasons    String[]       @default([])
-  context    Json           @default("{}")
-  createdAt  DateTime       @default(now())
+  id        String         @id @default(cuid())
+  userId    String?
+  user      User?          @relation(fields: [userId], references: [id])
+  action    String
+  resource  String?
+  decision  AccessDecision
+  reasons   String[]       @default([])
+  context   Json           @default("{}")
+  createdAt DateTime       @default(now())
 
   @@index([userId, createdAt])
   @@index([action, decision])
@@ -469,16 +478,16 @@ model TravelRequest {
 }
 
 model TravelAccessGrant {
-  id              String   @id @default(cuid())
+  id              String        @id @default(cuid())
   travelRequestId String
   request         TravelRequest @relation(fields: [travelRequestId], references: [id], onDelete: Cascade)
   userId          String
   destination     String
   startsAt        DateTime
   endsAt          DateTime
-  features        String[] @default([])
+  features        String[]      @default([])
   revokedAt       DateTime?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime      @default(now())
 
   @@index([userId, endsAt])
 }
@@ -533,32 +542,32 @@ model SupportRequest {
 }
 
 model SupportMessage {
-  id        String         @id @default(cuid())
-  requestId String
-  request   SupportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  author    String // member | admin name
-  authorRole String @default("member")
-  body      String
-  createdAt DateTime @default(now())
+  id         String         @id @default(cuid())
+  requestId  String
+  request    SupportRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author     String // member | admin name
+  authorRole String         @default("member")
+  body       String
+  createdAt  DateTime       @default(now())
 }
 
 // ============ Content / community / moderation ============
 
 model ContentItem {
-  id           String          @id @default(cuid())
+  id           String            @id @default(cuid())
   section      String
   title        String
-  kind         String          @default("Article")
-  body         String          @default("")
-  mediaUrls    String[]        @default([])
-  status       ContentStatus   @default(DRAFT)
+  kind         String            @default("Article")
+  body         String            @default("")
+  mediaUrls    String[]          @default([])
+  status       ContentStatus     @default(DRAFT)
   visibility   ContentVisibility @default(PUBLIC)
-  sortOrder    Int             @default(0)
+  sortOrder    Int               @default(0)
   scheduledFor DateTime?
   publishedAt  DateTime?
   updatedBy    String?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   versions ContentVersion[]
 
@@ -608,17 +617,17 @@ model ContentSubmission {
 }
 
 model Comment {
-  id        String   @id @default(cuid())
-  authorId  String?
+  id         String   @id @default(cuid())
+  authorId   String?
   authorName String?
-  targetKind String  // content | submission | journal
-  targetId  String
-  parentId  String?
-  body      String
-  status    String   @default("pending") // approved|pending|flagged|hidden
-  flags     Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  targetKind String // content | submission | journal
+  targetId   String
+  parentId   String?
+  body       String
+  status     String   @default("pending") // approved|pending|flagged|hidden
+  flags      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@index([targetKind, targetId])
   @@index([status])
@@ -638,9 +647,9 @@ model ModerationAction {
 }
 
 model CommunitySetting {
-  id     String @id @default(cuid())
-  key    String @unique
-  value  Json
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
   updatedBy String?
   updatedAt DateTime @updatedAt
 }
@@ -648,68 +657,68 @@ model CommunitySetting {
 // ============ Notifications ============
 
 model Notification {
-  id        String              @id @default(cuid())
-  userId    String?
-  user      User?               @relation(fields: [userId], references: [id])
-  category  String
-  title     String
-  body      String
-  channel   NotificationChannel @default(IN_APP)
-  audience  String              @default("member")
-  read      Boolean             @default(false)
+  id           String              @id @default(cuid())
+  userId       String?
+  user         User?               @relation(fields: [userId], references: [id])
+  category     String
+  title        String
+  body         String
+  channel      NotificationChannel @default(IN_APP)
+  audience     String              @default("member")
+  read         Boolean             @default(false)
   scheduledFor DateTime?
-  sentAt    DateTime?
-  createdAt DateTime            @default(now())
+  sentAt       DateTime?
+  createdAt    DateTime            @default(now())
 
   @@index([userId, read])
   @@index([category])
 }
 
 model NotificationPreference {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  inApp     Boolean  @default(true)
-  push      Boolean  @default(false)
-  email     Boolean  @default(true)
-  sms       Boolean  @default(false)
-  whatsapp  Boolean  @default(false)
-  categories Json    @default("{}")
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inApp      Boolean  @default(true)
+  push       Boolean  @default(false)
+  email      Boolean  @default(true)
+  sms        Boolean  @default(false)
+  whatsapp   Boolean  @default(false)
+  categories Json     @default("{}")
+  updatedAt  DateTime @updatedAt
 }
 
 // ============ Payments ============
 
 model PaymentConfiguration {
-  id           String   @id @default(cuid())
-  countryCode  String   // ISO-2 or GLOBAL
-  currency     String
-  amount       Decimal  @db.Decimal(12, 2)
-  providers    String[] @default([])
-  methods      String[] @default([])
+  id               String   @id @default(cuid())
+  countryCode      String // ISO-2 or GLOBAL
+  currency         String
+  amount           Decimal  @db.Decimal(12, 2)
+  providers        String[] @default([])
+  methods          String[] @default([])
   providerPriority String[] @default([])
-  enabled      Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  enabled          Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([countryCode, currency])
 }
 
 model Payment {
-  id              String        @id @default(cuid())
-  userId          String?
-  user            User?         @relation(fields: [userId], references: [id])
-  countryCode     String?
-  amount          Decimal       @db.Decimal(12, 2)
-  currency        String
-  method          String?
-  provider        String?
-  providerReference String?     @unique
-  status          PaymentStatus @default(PENDING)
-  webhookVerified Boolean       @default(false)
-  metadata        Json          @default("{}")
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  userId            String?
+  user              User?         @relation(fields: [userId], references: [id])
+  countryCode       String?
+  amount            Decimal       @db.Decimal(12, 2)
+  currency          String
+  method            String?
+  provider          String?
+  providerReference String?       @unique
+  status            PaymentStatus @default(PENDING)
+  webhookVerified   Boolean       @default(false)
+  metadata          Json          @default("{}")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   @@index([userId, status])
   @@index([status, createdAt])
@@ -721,7 +730,7 @@ model FileAsset {
   id         String   @id @default(cuid())
   ownerId    String?
   owner      User?    @relation(fields: [ownerId], references: [id])
-  kind       String   // community | identity | content | document
+  kind       String // community | identity | content | document
   bucket     String
   objectKey  String
   mimeType   String
@@ -793,4 +802,205 @@ model AppSetting {
   value     Json
   updatedBy String?
   updatedAt DateTime @updatedAt
+}
+
+// ============ Social feed / networking ============
+// Owner-seeded, verification-gated, moderated. Members read once verified;
+// posting, commenting, friending and messaging require a verified identity
+// (or TRUSTED_MEMBER+ / staff roles). Every review writes ModerationAction.
+
+enum PostStatus {
+  DRAFT
+  UNDER_REVIEW
+  APPROVED
+  PUBLISHED
+  REJECTED
+  CHANGES_REQUESTED
+  ARCHIVED
+}
+
+enum PostVisibility {
+  PUBLIC
+  FRIENDS
+  GROUP
+  MEMBERS
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  BLOCKED
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+enum ConversationKind {
+  DIRECT
+  GROUP
+}
+
+model Post {
+  id           String         @id @default(cuid())
+  authorId     String
+  author       User           @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  groupId      String?
+  group        Group?         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  originPostId String?
+  originPost   Post?          @relation("Reposts", fields: [originPostId], references: [id], onDelete: SetNull)
+  reposts      Post[]         @relation("Reposts")
+  body         String         @default("")
+  mediaUrls    String[]       @default([])
+  mediaKind    String         @default("text") // text|image|video|pdf|mixed
+  visibility   PostVisibility @default(MEMBERS)
+  status       PostStatus     @default(UNDER_REVIEW)
+  reviewerNote String?
+  decidedBy    String?
+  decidedAt    DateTime?
+  likeCount    Int            @default(0)
+  commentCount Int            @default(0)
+  repostCount  Int            @default(0)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  likes    PostLike[]
+  comments PostComment[]
+  reports  Report[]
+
+  @@index([authorId, createdAt])
+  @@index([groupId, status, createdAt])
+  @@index([status, visibility, createdAt])
+}
+
+model PostLike {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+}
+
+model PostComment {
+  id         String        @id @default(cuid())
+  postId     String
+  post       Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId   String?
+  author     User?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorName String?
+  parentId   String?
+  parent     PostComment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    PostComment[] @relation("CommentReplies")
+  body       String
+  status     String        @default("pending") // pending|approved|hidden|flagged
+  likeCount  Int           @default(0)
+  createdAt  DateTime      @default(now())
+
+  @@index([postId, createdAt])
+}
+
+model Report {
+  id         String       @id @default(cuid())
+  reporterId String?
+  reporter   User?        @relation(fields: [reporterId], references: [id], onDelete: SetNull)
+  targetKind String // post|comment|member|message
+  targetId   String
+  reason     String
+  details    String?
+  status     ReportStatus @default(OPEN)
+  decidedBy  String?
+  decidedAt  DateTime?
+  createdAt  DateTime     @default(now())
+  post       Post?        @relation(fields: [postId], references: [id])
+  postId     String?
+
+  @@index([status, createdAt])
+  @@index([targetKind, targetId])
+}
+
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  requester User @relation("FriendRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+  @@index([requesterId, status])
+}
+
+model Group {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  createdBy   String?
+  isOpen      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members GroupMember[]
+  posts   Post[]
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String   @default("member") // owner|moderator|member
+  status    String   @default("active") // active|pending|banned
+  createdAt DateTime @default(now())
+
+  @@unique([groupId, userId])
+  @@index([userId, status])
+}
+
+model Conversation {
+  id        String           @id @default(cuid())
+  kind      ConversationKind @default(DIRECT)
+  title     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  participants ConversationParticipant[]
+  messages     DirectMessage[]
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model DirectMessage {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  body           String
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
 }
