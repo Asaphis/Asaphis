@@ -1,6 +1,5 @@
 import type { Metadata } from "next"
 import { PublicShell } from "@/components/public/PublicShell"
-import { MessagePage } from "@/components/public/pages/MessagePage"
 import { PublicSectionLoader } from "@/components/public/PublicSectionLoader"
 import { demoData } from "@/lib/mock-data"
 
@@ -8,5 +7,5 @@ export const metadata: Metadata = { title: "Featured message · AsaPhis ORG", de
 
 export default function MessageRoute() {
   // Dynamic: video + title + description from GET /content/published section=message.
-  return <PublicShell><PublicSectionLoader fallback={demoData.publicContent}>{(content) => <MessagePage content={content} />}</PublicSectionLoader></PublicShell>
+  return <PublicShell><PublicSectionLoader fallback={demoData.publicContent} section="message" /></PublicShell>
 }
