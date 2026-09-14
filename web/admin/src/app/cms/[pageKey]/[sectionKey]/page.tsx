@@ -203,7 +203,7 @@ export default function CmsSectionDetail() {
                 </div>
                 <div style={{ display: "grid", gap: 4 }}>
                   <Label htmlFor="cms-new-media">Media — image/video URLs, comma-separated (first video = main video; poster first for Featured Message)</Label>
-                  <Textarea id="cms-new-media" value={createForm.mediaUrls} onChange={(e) => setCreateForm({ ...createForm, mediaUrls: e.target.value })} rows={2} placeholder=https://…poster.jpg, https://…video.mp4" />
+                  <Textarea id="cms-new-media" value={createForm.mediaUrls} onChange={(e) => setCreateForm({ ...createForm, mediaUrls: e.target.value })} rows={2} placeholder="https://…poster.jpg, https://…video.mp4" />
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <label style={{ fontSize: 13 }}>Kind
