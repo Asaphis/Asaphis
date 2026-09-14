@@ -21,7 +21,7 @@ export interface BackendContentItem {
 
 export interface BackendPublishedResponse {
   items: BackendContentItem[];
-  sections: { key: string; visible: boolean; sortOrder: number }[];
+  sections: { key: string; title?: string; visible: boolean; sortOrder: number; config?: Record<string, unknown> }[];
 }
 
 function pick(section: string, items: BackendContentItem[]): BackendContentItem[] {
@@ -45,6 +45,12 @@ function mediaOf(item: BackendContentItem | undefined): { image?: string; video?
   const image = item.imageUrl ?? urls.find((u) => u !== video);
   return { image: image ?? undefined, video: video ?? undefined, poster: item.posterUrl ?? image ?? undefined };
 }
+const CATEGORY_BY_TITLE: Record<string, Resource["category"]> = {
+  "how to keep context when a story travels": "History",
+  "a community note is more than a post": "Community knowledge",
+  "designing technology for people who need it": "Technology",
+};
+
 export function mapBackendToPublicContent(data: BackendPublishedResponse): PublicContent {
   const fallback = demoData.publicContent;
   const items = Array.isArray(data?.items) ? data.items : [];
@@ -56,20 +62,32 @@ export function mapBackendToPublicContent(data: BackendPublishedResponse): Publi
   const about = first("about", items);
   const vision = first("vision", items);
   const support = first("support", items);
+  const community = first("community", items);
   const educationItems = pick("education", items);
 
   const educationPreview: Resource[] = educationItems.length
-    ? educationItems.slice(0, 6).map((e, idx) => ({
-        id: e.id,
-        category: "Education" as const,
-        kind: (e.kind === "Video" || e.title?.toLowerCase().includes("video") ? "Video" : "Article") as Resource["kind"],
-        title: e.title,
-        description: e.body ?? e.description ?? fallback.educationPreview[idx]?.description ?? "",
-        imageUrl: mediaOf(e).image ?? fallback.educationPreview[idx]?.imageUrl,
-        imageAlt: e.title,
-        visibility: "public" as const,
-        publishedAt: new Date().toISOString().slice(0, 10),
-      }))
+    ? educationItems.slice(0, 6).map((e, idx) => {
+        const fb = fallback.educationPreview[idx];
+        const kindRaw = String(e.kind ?? "");
+        const kind: Resource["kind"] =
+          kindRaw === "Video" || kindRaw === "Brief" || kindRaw === "Document"
+            ? kindRaw
+            : e.title?.toLowerCase().includes("video")
+              ? "Video"
+              : (fb?.kind ?? "Article");
+        return {
+          id: e.id,
+          category: CATEGORY_BY_TITLE[e.title?.toLowerCase() ?? ""] ?? fb?.category ?? ("Education" as const),
+          kind,
+          title: e.title,
+          description: e.body ?? e.description ?? fb?.description ?? "",
+          imageUrl: mediaOf(e).image ?? fb?.imageUrl,
+          imageAlt: fb?.imageAlt ?? e.title,
+          durationMinutes: fb?.durationMinutes,
+          visibility: "public" as const,
+          publishedAt: fb?.publishedAt ?? new Date().toISOString().slice(0, 10),
+        };
+      })
     : fallback.educationPreview;
 
   const heroMedia = mediaOf(hero);
@@ -120,6 +138,14 @@ export function mapBackendToPublicContent(data: BackendPublishedResponse): Publi
     support: support
       ? { ...fallback.support, title: support.title, body: support.description ?? support.body ?? fallback.support.body }
       : fallback.support,
-    communityPreview: fallback.communityPreview,
+    communityPreview: community
+      ? {
+          ...fallback.communityPreview,
+          title: community.title || fallback.communityPreview.title,
+          body: community.description ?? community.body ?? fallback.communityPreview.body,
+          imageUrl: mediaOf(community).image ?? fallback.communityPreview.imageUrl,
+          imageAlt: fallback.communityPreview.imageAlt,
+        }
+      : fallback.communityPreview,
   };
 }

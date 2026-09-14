@@ -20,6 +20,20 @@ class UpsertContentDto {
   @IsOptional() sortOrder?: number;
 }
 
+class UpdateContentDto {
+  @IsOptional() @IsString() section?: string;
+  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() kind?: string;
+  @IsOptional() @IsString() body?: string;
+  @IsOptional() @IsArray() mediaUrls?: string[];
+  @IsOptional() @IsString() imageUrl?: string;
+  @IsOptional() @IsString() videoUrl?: string;
+  @IsOptional() @IsString() posterUrl?: string;
+  @IsOptional() @IsString() visibility?: string;
+  @IsOptional() @IsString() status?: string;
+  @IsOptional() sortOrder?: number;
+}
+
 @ApiTags('content')
 @Controller('content')
 export class ContentController {
@@ -40,7 +54,7 @@ export class ContentController {
     return this.prisma.contentItem.findMany({
       where: {
         status: 'PUBLISHED',
-        section: 'Education',
+        section: { equals: 'education', mode: 'insensitive' },
         ...(category && category !== 'All' ? { title: { contains: category, mode: 'insensitive' } } : {}),
         ...(search ? { OR: [{ title: { contains: search, mode: 'insensitive' } }, { body: { contains: search, mode: 'insensitive' } }] } : {}),
       },
@@ -68,6 +82,39 @@ export class ContentController {
       data: { section: dto.section, kind: dto.kind ?? 'Article', title: dto.title, body: dto.body ?? '', mediaUrls: media, visibility: (dto.visibility?.toUpperCase() as never) ?? 'PUBLIC', status: (dto.status?.toUpperCase() as never) ?? 'DRAFT', sortOrder: dto.sortOrder ?? 0, updatedBy: admin.email },
     });
     await this.prisma.contentVersion.create({ data: { contentId: row.id, version: 1, snapshot: row as never, summary: 'Created', changedBy: admin.email } });
+    return row;
+  }
+
+  @Roles('CONTENT_ADMIN', 'SUPER_ADMIN')
+  @Patch(':id')
+  async update(@Param('id') id: string, @Body() dto: UpdateContentDto, @CurrentUser() admin: { email: string }) {
+    const prev = await this.prisma.contentItem.findUniqueOrThrow({ where: { id } });
+    const media: string[] | undefined = dto.mediaUrls
+      ? [...dto.mediaUrls]
+      : dto.imageUrl || dto.videoUrl || dto.posterUrl
+        ? [...(prev.mediaUrls ?? [])]
+        : undefined;
+    if (media && dto.imageUrl && !media.includes(dto.imageUrl)) media.unshift(dto.imageUrl);
+    if (media && dto.videoUrl && !media.includes(dto.videoUrl)) media.push(dto.videoUrl);
+    if (media && dto.posterUrl && !media.includes(dto.posterUrl)) media.unshift(dto.posterUrl);
+    const row = await this.prisma.contentItem.update({
+      where: { id },
+      data: {
+        ...(dto.section !== undefined ? { section: dto.section } : {}),
+        ...(dto.title !== undefined ? { title: dto.title } : {}),
+        ...(dto.kind !== undefined ? { kind: dto.kind } : {}),
+        ...(dto.body !== undefined ? { body: dto.body } : {}),
+        ...(media !== undefined ? { mediaUrls: media } : {}),
+        ...(dto.visibility !== undefined ? { visibility: dto.visibility.toUpperCase() as never } : {}),
+        ...(dto.status !== undefined ? { status: dto.status.toUpperCase() as never } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        updatedBy: admin.email,
+        ...(dto.status?.toUpperCase() === 'PUBLISHED' ? { publishedAt: new Date() } : {}),
+      },
+    });
+    const count = await this.prisma.contentVersion.count({ where: { contentId: id } });
+    await this.prisma.contentVersion.create({ data: { contentId: id, version: count + 1, snapshot: row as never, summary: 'Edited content fields', changedBy: admin.email } });
+    await this.prisma.adminAuditLog.create({ data: { adminEmail: admin.email, action: 'content.update', target: id, previousState: { title: prev.title } as never, newState: { title: row.title } as never } });
     return row;
   }
 

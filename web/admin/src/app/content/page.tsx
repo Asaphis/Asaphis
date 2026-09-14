@@ -11,7 +11,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useAdminApi } from "@/lib/use-admin-api";
 import { formatAdminDate, type ContentItem } from "@/lib/admin-types";
 
-const itemTabs = ["Items", "Landing builder", "Version history"];
+const itemTabs = ["Items", "Landing builder", "Media Library", "Version history"];
 const label = (v: string) => v[0].toUpperCase() + v.slice(1);
 
 export default function ContentPage() {
@@ -22,6 +22,8 @@ export default function ContentPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ section: "hero", kind: "Article", title: "", body: "", mediaUrls: "", visibility: "PUBLIC", status: "DRAFT" });
   const [uploading, setUploading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ title: "", body: "", mediaUrls: "", section: "", kind: "", visibility: "", status: "", sortOrder: 0 });
 
   const items = useQuery({ queryKey: ["admin-content"], queryFn: () => api.listContent() });
   const sections = useQuery({ queryKey: ["admin-sections"], queryFn: () => api.listLandingSections(), enabled: tab === "Landing builder" });
@@ -31,6 +33,38 @@ export default function ContentPage() {
     mutationFn: ({ id, status }: { id: string; status: ContentItem["status"] }) => api.updateContentStatus(id, status),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["admin-content"] }),
   });
+
+  const saveEdit = useMutation({
+    mutationFn: () =>
+      api.updateContent(editingId!, {
+        title: editForm.title,
+        body: editForm.body,
+        mediaUrls: editForm.mediaUrls.split(",").map((s) => s.trim()).filter(Boolean),
+        section: editForm.section,
+        kind: editForm.kind,
+        visibility: editForm.visibility,
+        status: editForm.status,
+        sortOrder: Number(editForm.sortOrder) || 0,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin-content"] });
+      setEditingId(null);
+    },
+  });
+
+  const openEdit = (item: ContentItem) => {
+    setEditingId(item.id);
+    setEditForm({
+      title: item.title ?? "",
+      body: (item as { body?: string }).body ?? "",
+      mediaUrls: (item.mediaUrls ?? []).join(", "),
+      section: item.section ?? "",
+      kind: item.kind ?? "Article",
+      visibility: String(item.visibility ?? "PUBLIC").toUpperCase(),
+      status: String(item.status ?? "draft").toLowerCase(),
+      sortOrder: item.sortOrder ?? 0,
+    });
+  };
 
   const moveSection = useMutation({
     mutationFn: async ({ ids }: { ids: string[] }) => api.reorderLandingSections(ids),
@@ -150,12 +184,13 @@ export default function ContentPage() {
                 <TableBody>
                   {(items.data ?? []).map((item) => (
                     <TableRow key={item.id}>
-                      <TableCell><span className="admin-row-main">{item.title}</span><span className="admin-row-sub">{item.kind} · #{item.sortOrder}</span></TableCell>
+                      <TableCell><span className="admin-row-main">{item.title}</span><span className="admin-row-sub">{item.kind} · #{item.sortOrder}</span><span className="admin-row-sub">Appears on → Public Website → Home → {item.section}</span></TableCell>
                       <TableCell>{item.section}</TableCell>
                       <TableCell><StatusBadge status={label(item.status)} /></TableCell>
                       <TableCell><span className="admin-row-sub">{formatAdminDate(item.updatedAt)} · {item.updatedBy}</span></TableCell>
                       <TableCell>
                         <div className="admin-row-actions">
+                          <Button type="button" size="sm" variant="outline" onClick={() => openEdit(item)}>Edit</Button>
                           {item.status !== "published" ? <Button type="button" size="sm" variant="outline" onClick={() => setStatus.mutate({ id: item.id, status: "published" })}>Publish</Button> : <Button type="button" size="sm" variant="outline" onClick={() => setStatus.mutate({ id: item.id, status: "hidden" })}>Hide</Button>}
                           <Button type="button" size="sm" variant="ghost" onClick={() => setVersionsFor(item.id)}>Versions</Button>
                         </div>
@@ -206,6 +241,39 @@ export default function ContentPage() {
         </SectionCard>
       ) : null}
 
+      {tab === "Media Library" ? (
+        <SectionCard title="Media Library" intro="Every image/video used by the landing page. Used-in is computed from live content — do not delete an asset that is still used. Uploads go through the backend.">
+          <QueryState loading={items.isLoading} error={items.error} empty={!items.data || items.data.length === 0} emptyText="No media yet." onRetry={() => items.refetch()}>
+            <div className="admin-table-wrap">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Asset</TableHead>
+                    <TableHead>Used in</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(items.data ?? [])
+                    .flatMap((item) => (item.mediaUrls ?? []).map((url) => ({ url, item })))
+                    .slice(0, 100)
+                    .map(({ url, item }, idx) => (
+                      <TableRow key={`${item.id}-${idx}`}>
+                        <TableCell>
+                          <span className="admin-row-main" style={{ wordBreak: "break-all" }}>{url.length > 80 ? `${url.slice(0, 80)}…` : url}</span>
+                          <span className="admin-row-sub">{url.match(/\.(mp4|webm|mov)(\?|$)/i) ? "Video" : "Image"} · {item.kind}</span>
+                        </TableCell>
+                        <TableCell><span className="admin-row-sub">Home → {item.section} → {item.title.slice(0, 60)}</span></TableCell>
+                        <TableCell className="text-right"><Button type="button" size="sm" variant="outline" onClick={() => openEdit(item)}>Replace</Button></TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </div>
+          </QueryState>
+        </SectionCard>
+      ) : null}
+
       {tab === "Version history" ? (
         <SectionCard title="Version history" intro="Open Versions on any library item to preview and restore earlier states.">
           <QueryState loading={items.isLoading} error={items.error} empty={!items.data || items.data.length === 0} emptyText="No content items." onRetry={() => items.refetch()}>
@@ -241,6 +309,53 @@ export default function ContentPage() {
             </div>
           ))}
           {(versions.data ?? []).length === 0 ? <p className="admin-subtitle">No versions recorded for this item yet.</p> : null}
+        </DetailDrawer>
+      ) : null}
+
+      {editingId ? (
+        <DetailDrawer title="Edit content" subtitle={`Appears on → Public Website → Home → ${editForm.section}`} onClose={() => setEditingId(null)}>
+          <div style={{ display: "grid", gap: 10 }}>
+            <DetailRow label="Content Location"><span>Public Website → Home → {editForm.section} → {editForm.kind}</span></DetailRow>
+            <label style={{ display: "grid", gap: 4, fontSize: 13 }}>Heading / Title
+              <input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
+            </label>
+            <label style={{ display: "grid", gap: 4, fontSize: 13 }}>Description / Body
+              <textarea value={editForm.body} onChange={(e) => setEditForm({ ...editForm, body: e.target.value })} rows={4} />
+            </label>
+            <label style={{ display: "grid", gap: 4, fontSize: 13 }}>Media URLs (comma-separated — for Featured Message put poster first, video second)
+              <textarea value={editForm.mediaUrls} onChange={(e) => setEditForm({ ...editForm, mediaUrls: e.target.value })} rows={3} />
+            </label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <label style={{ fontSize: 13 }}>Section
+                <select value={editForm.section} onChange={(e) => setEditForm({ ...editForm, section: e.target.value })}>
+                  {["hero", "message", "about", "vision", "education", "community", "support", "final-cta", "member-library", "document"].map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: 13 }}>Kind
+                <select value={editForm.kind} onChange={(e) => setEditForm({ ...editForm, kind: e.target.value })}>
+                  {["Article", "Video", "Hero", "Brief", "News", "Document"].map((k) => <option key={k} value={k}>{k}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: 13 }}>Visibility
+                <select value={editForm.visibility} onChange={(e) => setEditForm({ ...editForm, visibility: e.target.value })}>
+                  {["PUBLIC", "MEMBER", "TRUSTED"].map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: 13 }}>Status
+                <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}>
+                  {["draft", "published", "hidden", "scheduled", "archived"].map((v) => <option key={v} value={v}>{v}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: 13 }}>Order
+                <input type="number" value={editForm.sortOrder} onChange={(e) => setEditForm({ ...editForm, sortOrder: Number(e.target.value) })} style={{ width: 80 }} />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Button type="button" size="sm" disabled={saveEdit.isPending} onClick={() => saveEdit.mutate()}>{saveEdit.isPending ? "Saving…" : "Save"}</Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--muted-foreground)" }}>Saving creates a new version and writes an audit log. Change status to Published to update the public website.</p>
+          </div>
         </DetailDrawer>
       ) : null}
     </AdminShell>

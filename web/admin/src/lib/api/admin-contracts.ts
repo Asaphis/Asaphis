@@ -73,6 +73,10 @@ export interface AdminContentApi {
   }): Promise<ContentItem>;
   uploadFile(kind: string, file: File): Promise<{ fileId: string; fileToken: string; objectKey?: string }>;
   deleteContent(id: string): Promise<{ ok: boolean }>;
+  updateContent(
+    id: string,
+    patch: Partial<{ section: string; kind: string; title: string; body: string; mediaUrls: string[]; visibility: string; status: string; sortOrder: number }>,
+  ): Promise<ContentItem>;
   updateContentStatus(id: string, status: ContentItem["status"]): Promise<ContentItem>;
   reorderContent(ids: string[]): Promise<ContentItem[]>;
   listLandingSections(): Promise<LandingSection[]>;

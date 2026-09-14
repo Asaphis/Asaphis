@@ -680,6 +680,9 @@ function createRealAdminApi(): AdminApi {
       await adminFetch(`/content/${id}`, { method: "DELETE" });
       return { ok: true };
     },
+    updateContent: async (id, patch) => {
+      return mapContentItem(await adminFetch<Record<string, unknown>>(`/content/${id}`, { method: "PATCH", body: JSON.stringify(patch) }));
+    },
     updateContentStatus: async (id, status) => {
       const map: Record<string, string> = { published: "PUBLISHED", hidden: "HIDDEN", draft: "DRAFT", scheduled: "SCHEDULED", archived: "ARCHIVED" };
       return mapContentItem(await adminFetch<Record<string, unknown>>(`/content/${id}/status`, { method: "PATCH", body: JSON.stringify({ status: map[status] ?? status }) }));

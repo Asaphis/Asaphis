@@ -163,6 +163,13 @@ export function createAdminApi(context: MockContext = { actor: "A. Admin", role:
       log(`Deleted content ${id}`, "");
       return wait({ ok: true });
     },
+    async updateContent(id, patch) {
+      const item = content.find((c) => c.id === id);
+      if (!item) throw new Error("Content not found");
+      Object.assign(item, patch, { updatedAt: new Date().toISOString().slice(0, 10), updatedBy: context.actor });
+      log(`Edited content ${item.title}`, `Public Website -> Home -> ${item.section}`);
+      return wait({ ...item });
+    },
     async updateContentStatus(id, status) {
       const item = content.find((c) => c.id === id);
       if (!item) throw new Error("Content not found");
