@@ -1,5 +1,5 @@
 import { apiFetch, isRealApiEnabled } from "@/lib/api/http-client";
-import { developmentFeed } from "../../../../data/development/social";
+import { developmentFeed } from "../../../data/development/social";
 import type { FeedPage, PostComment, SocialPost } from "@/lib/social/types";
 
 // Social service abstraction — UI -> hooks -> socialService -> backend.
