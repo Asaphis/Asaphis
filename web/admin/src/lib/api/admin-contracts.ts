@@ -1,5 +1,7 @@
 import type {
   AdminMember,
+  SocialPost,
+  SocialReport,
   AdminNotification,
   AdminRestriction,
   AdminSession,
@@ -87,6 +89,13 @@ export interface AdminContentApi {
   reorderLandingSections(ids: string[]): Promise<LandingSection[]>;
   listContentVersions(contentId: string): Promise<ContentVersion[]>;
   restoreContentVersion(contentId: string, version: number): Promise<ContentItem>;
+}
+
+export interface AdminSocialApi {
+  listSocialPosts(status?: string): Promise<SocialPost[]>;
+  reviewSocialPost(id: string, decision: "approve" | "reject" | "request-changes" | "publish", note?: string): Promise<SocialPost>;
+  listReports(status?: string): Promise<SocialReport[]>;
+  reviewReport(id: string, decision: "resolve" | "dismiss", postAction?: "hide" | "keep"): Promise<SocialReport>;
 }
 
 export interface AdminModerationApi {
@@ -216,6 +225,7 @@ export type AdminApi = AdminDashboardApi &
   AdminMembersApi &
   AdminIdentityApi &
   AdminContentApi &
+  AdminSocialApi &
   AdminModerationApi &
   AdminTravelApi &
   AdminPaymentsApi &

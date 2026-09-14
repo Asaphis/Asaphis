@@ -279,6 +279,41 @@ function mapModeratedComment(r: unknown): ModeratedComment {
   };
 }
 
+function mapSocialPost(r: unknown): import("@/lib/admin-types").SocialPost {
+  const row = r as {
+    id?: string; body?: string; mediaUrls?: string[]; mediaKind?: string;
+    visibility?: string; status?: string; likeCount?: number; commentCount?: number;
+    repostCount?: number; createdAt?: string;
+    author?: { displayName?: string; email?: string } | null;
+  };
+  const author = row.author as { displayName?: string; email?: string } | undefined;
+  return {
+    id: String(row.id ?? ""),
+    authorName: String(author?.displayName ?? author?.email ?? ""),
+    body: String(row.body ?? ""),
+    mediaUrls: Array.isArray(row.mediaUrls) ? row.mediaUrls : [],
+    mediaKind: String(row.mediaKind ?? "text"),
+    visibility: String(row.visibility ?? "MEMBERS"),
+    status: String(row.status ?? "UNDER_REVIEW"),
+    likeCount: Number(row.likeCount ?? 0),
+    commentCount: Number(row.commentCount ?? 0),
+    repostCount: Number(row.repostCount ?? 0),
+    createdAt: String(row.createdAt ?? ""),
+  };
+}
+
+function mapSocialReport(r: unknown): import("@/lib/admin-types").SocialReport {
+  const row = r as { id?: string; targetKind?: string; targetId?: string; reason?: string; status?: string; createdAt?: string };
+  return {
+    id: String(row.id ?? ""),
+    targetKind: String(row.targetKind ?? ""),
+    targetId: String(row.targetId ?? ""),
+    reason: String(row.reason ?? ""),
+    status: String(row.status ?? "OPEN"),
+    createdAt: String(row.createdAt ?? ""),
+  };
+}
+
 type BackendTravelRow = {
   id?: string; userId?: string; verifiedCountry?: string | null; currentIpCountry?: string | null;
   destination?: string; startDate?: string; endDate?: string; reason?: string; status?: string;
@@ -713,6 +748,24 @@ function createRealAdminApi(): AdminApi {
       return (Array.isArray(rows) ? rows : []).map(mapContentVersion);
     },
     restoreContentVersion: async (cid, v) => mapContentItem(await adminFetch<Record<string, unknown>>(`/content/${cid}/restore/${v}`, { method: "POST" })),
+    listSocialPosts: async (status) => {
+      const q = status && status !== "All" ? `?status=${encodeURIComponent(status)}` : "";
+      const rows = await adminFetch<unknown[]>(`/social/admin/posts${q}`);
+      return (Array.isArray(rows) ? rows : []).map(mapSocialPost);
+    },
+    reviewSocialPost: async (id, decision, note) => {
+      const row = await adminFetch<unknown>(`/social/admin/posts/${id}/review`, { method: "POST", body: JSON.stringify({ decision, note }) });
+      return mapSocialPost(row);
+    },
+    listReports: async (status) => {
+      const q = status && status !== "All" ? `?status=${encodeURIComponent(status)}` : "";
+      const rows = await adminFetch<unknown[]>(`/social/admin/reports${q}`);
+      return (Array.isArray(rows) ? rows : []).map(mapSocialReport);
+    },
+    reviewReport: async (id, decision, postAction) => {
+      const row = await adminFetch<unknown>(`/social/admin/reports/${id}/review`, { method: "POST", body: JSON.stringify({ decision, postAction }) });
+      return mapSocialReport(row);
+    },
     listSubmissions: async (s) => {
       const norm = (s ?? "All").toLowerCase();
       const rows = await adminFetch<unknown[]>(`/community/admin/submissions${norm === "all" ? "" : `?status=${encodeURIComponent(norm.replace(/-/g, "_"))}`}`);

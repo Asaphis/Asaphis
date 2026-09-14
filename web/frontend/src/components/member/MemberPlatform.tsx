@@ -58,6 +58,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { StateStrip } from "@/components/shared/StateStrip";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { Feed } from "@/components/social/Feed";
 import type { AsaPhisApi } from "@/lib/api/contracts";
 import type {
   MemberPanel,
@@ -519,13 +520,14 @@ function HomePanel({
 }) {
   const firstName = (profile?.name ?? "").trim().split(" ")[0] || "there";
   return (
-    <div>
+    <div style={{ display: "grid", gap: 16 }}>
       <PanelHeader
-        eyebrow="Your workspace"
-        title={`Good morning, ${firstName}.`}
-        description="A focused place for learning, updates, careful participation, and account support."
+        eyebrow="Home"
+        title={`Welcome back, ${firstName}.`}
+        description="Your AsaPhis social-learning feed — official lessons, community knowledge, and people carrying it forward."
         action={<StatusBadge status={profile ? (profile.accountStatus === "active" ? "Active" : "Limited") : "Loading"} />}
       />
+      <Feed />
       <div className="home-grid">
         {featured ? (
           <Card className="home-feature">

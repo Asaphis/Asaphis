@@ -110,6 +110,29 @@ export interface ContentVersion {
   summary: string;
 }
 
+export interface SocialPost {
+  id: string;
+  authorName: string;
+  body: string;
+  mediaUrls: string[];
+  mediaKind: string;
+  visibility: string;
+  status: string;
+  likeCount: number;
+  commentCount: number;
+  repostCount: number;
+  createdAt: string;
+}
+
+export interface SocialReport {
+  id: string;
+  targetKind: string;
+  targetId: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+}
+
 export interface LandingSection {
   id: string;
   key: string;

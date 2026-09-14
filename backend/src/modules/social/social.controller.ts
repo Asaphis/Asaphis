@@ -60,9 +60,11 @@ const STAFF = ['MODERATOR', 'CONTENT_ADMIN', 'SUPER_ADMIN'];
 export class SocialController {
   constructor(private prisma: PrismaService) {}
 
-  private authorCard(user: { id: string; email?: string; member?: { displayName?: string; memberCode?: string } | null }) {
+  private authorCard(user: { id: string; email?: string; roles?: string[]; member?: { displayName?: string; memberCode?: string } | null }) {
     const name = displayNameOf(user.email, user.member?.displayName);
-    return { id: user.id, displayName: name, memberCode: user.member?.memberCode ?? '', initials: initialsOf(name) };
+    const roles = Array.isArray(user.roles) ? user.roles : [];
+    const isOfficial = roles.some((r) => STAFF.includes(r));
+    return { id: user.id, displayName: name, memberCode: user.member?.memberCode ?? '', initials: initialsOf(name), isOfficial };
   }
 
   private mapPost(
@@ -102,7 +104,7 @@ export class SocialController {
 
   private postInclude() {
     return {
-      author: { select: { id: true, email: true, member: { select: { displayName: true, memberCode: true } } } },
+      author: { select: { id: true, email: true, roles: true, member: { select: { displayName: true, memberCode: true } } } },
       group: { select: { id: true, name: true } },
       originPost: { select: { id: true, body: true, author: { select: { email: true, member: { select: { displayName: true } } } } } },
     };
@@ -375,7 +377,9 @@ export class SocialController {
     @Body() dto: ReviewPostDto,
     @CurrentUser() admin: { email: string },
   ) {
-    const map = { approve: 'APPROVED', publish: 'PUBLISHED', reject: 'REJECTED', 'request-changes': 'CHANGES_REQUESTED' } as const;
+    // MVP feed only serves PUBLISHED, so approve publishes immediately.
+    // Full APPROVED->PUBLISHED two-step returns when scheduling is needed.
+    const map = { approve: 'PUBLISHED', publish: 'PUBLISHED', reject: 'REJECTED', 'request-changes': 'CHANGES_REQUESTED' } as const;
     const status = map[dto.decision];
     if (!status) throw new BadRequestException('Invalid decision');
     const row = await this.prisma.post.update({

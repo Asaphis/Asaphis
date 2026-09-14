@@ -34,6 +34,8 @@ export type AdminArea =
   | "members"
   | "identity"
   | "content"
+  | "cms"
+  | "social"
   | "moderation"
   | "community"
   | "payments"
@@ -45,10 +47,10 @@ export type AdminArea =
   | "settings";
 
 const roleAccess: Record<AdminRole, AdminArea[]> = {
-  super: ["dashboard", "members", "identity", "content", "moderation", "community", "payments", "regions", "notifications", "security", "support", "analytics", "settings"],
+  super: ["dashboard", "members", "identity", "content", "cms", "social", "moderation", "community", "payments", "regions", "notifications", "security", "support", "analytics", "settings"],
   security: ["dashboard", "members", "identity", "security", "support"],
-  content: ["dashboard", "content", "moderation", "notifications", "support"],
-  moderator: ["dashboard", "moderation", "community", "support"],
+  content: ["dashboard", "content", "cms", "social", "moderation", "notifications", "support"],
+  moderator: ["dashboard", "social", "moderation", "community", "support"],
   finance: ["dashboard", "members", "payments", "analytics", "support"],
 };
 

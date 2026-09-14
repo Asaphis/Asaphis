@@ -217,6 +217,20 @@ export function createAdminApi(context: MockContext = { actor: "A. Admin", role:
       return wait({ ...item });
     },
 
+    async listSocialPosts() {
+      return wait([]);
+    },
+    async reviewSocialPost(id) {
+      log(`Reviewed social post ${id}`, "");
+      return wait({ id, authorName: "", body: "", mediaUrls: [], mediaKind: "text", visibility: "MEMBERS", status: "PUBLISHED", likeCount: 0, commentCount: 0, repostCount: 0, createdAt: new Date().toISOString() } as never);
+    },
+    async listReports() {
+      return wait([]);
+    },
+    async reviewReport(id) {
+      log(`Reviewed report ${id}`, "");
+      return wait({ id, targetKind: "post", targetId: "", reason: "", status: "RESOLVED", createdAt: new Date().toISOString() } as never);
+    },
     async listSubmissions(status) {
       return wait(!status || status === "All" ? subs : subs.filter((s) => s.status === status));
     },
