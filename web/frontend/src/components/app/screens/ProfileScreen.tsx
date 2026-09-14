@@ -87,7 +87,7 @@ export function ProfileScreen({ onLogout }: { onLogout: () => void }) {
               </span>
               <span style={{ display: "flex", gap: 6 }}>
                 <Button size="sm" onClick={() => accept.mutate(r.id)}>Accept</Button>
-                <Button size="sm" variant="outline" onClick={() => friendsService.decline(r.id).then(() => queryClient.invalidateQueries({ queryKey: ["friend-requests"] })}>Decline</Button>
+                <Button size="sm" variant="outline" onClick={() => friendsService.decline(r.id).then(() => queryClient.invalidateQueries({ queryKey: ["friend-requests"] }))}>Decline</Button>
               </span>
             </div>
           ))}
@@ -98,7 +98,7 @@ export function ProfileScreen({ onLogout }: { onLogout: () => void }) {
               <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
                 <Avatar><AvatarFallback>{f.initials}</AvatarFallback></Avatar> {f.name}
               </span>
-              <Button size="sm" variant="ghost" onClick={() => friendsService.remove(f.id).then(() => queryClient.invalidateQueries({ queryKey: ["friends"] })}>Remove</Button>
+              <Button size="sm" variant="ghost" onClick={() => friendsService.remove(f.id).then(() => queryClient.invalidateQueries({ queryKey: ["friends"] }))}>Remove</Button>
             </div>
           ))}
           {(friends.data ?? []).length === 0 ? <span style={{ fontSize: 13, opacity: 0.7 }}>No friends yet. Find people in Discover.</span> : null}
@@ -123,13 +123,13 @@ export function ProfileScreen({ onLogout }: { onLogout: () => void }) {
             {(devices.data ?? []).map((d) => (
               <div key={d.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                 <span>{d.label}<br /><span style={{ opacity: 0.7 }}>{d.detail}</span></span>
-                <Button size="sm" variant="ghost" onClick={() => api.revokeDevice(d.id).then(() => queryClient.invalidateQueries({ queryKey: ["member-devices"] })}>Revoke</Button>
+                <Button size="sm" variant="ghost" onClick={() => api.revokeDevice(d.id).then(() => queryClient.invalidateQueries({ queryKey: ["member-devices"] }))}>Revoke</Button>
               </div>
             ))}
             {(sessions.data ?? []).map((s) => (
               <div key={s.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
                 <span>{s.label}<br /><span style={{ opacity: 0.7 }}>{s.detail}</span></span>
-                <Button size="sm" variant="ghost" onClick={() => api.terminateSession(s.id).then(() => queryClient.invalidateQueries({ queryKey: ["member-sessions"] })}>End</Button>
+                <Button size="sm" variant="ghost" onClick={() => api.terminateSession(s.id).then(() => queryClient.invalidateQueries({ queryKey: ["member-sessions"] }))}>End</Button>
               </div>
             ))}
           </Card>
