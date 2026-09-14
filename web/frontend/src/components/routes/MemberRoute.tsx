@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { MemberPlatform } from "@/components/member/MemberPlatform";
+import { SocialApp } from "@/components/app/SocialApp";
 import { createApi } from "@/lib/api/api-factory";
 import { useAuth } from "@/lib/auth/auth-context";
 
@@ -34,7 +34,7 @@ export function MemberRoute() {
         Skip to main content
       </a>
       <main id="app-main" className="app-main">
-        <MemberPlatform
+        <SocialApp
           api={api}
           onPublic={() => router.push("/")}
           onLogout={async () => {
